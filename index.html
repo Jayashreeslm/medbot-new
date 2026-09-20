@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}MEDBOT — Your Smart Medicine Assistant{% endblock %}
+{% block guest_content %}
+<div class="landing">
+
+  <nav class="landing-nav">
+    <div class="landing-brand"><span class="brand-icon">⚕</span> MEDBOT</div>
+    <div class="landing-nav-links">
+      <a href="{{ url_for('login') }}" class="btn btn-outline">Login</a>
+      <a href="{{ url_for('register') }}" class="btn btn-primary">Register</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <h1>MEDBOT</h1>
+    <p class="hero-subtitle">Intelligent Pill Dispenser and Patient Assistance System</p>
+    <p class="hero-tagline">"Your Smart Medicine Assistant"</p>
+    <p class="hero-description">
+      MEDBOT helps manage scheduled medicines, patient verification, medicine compartments,
+      notifications, patient search and hardware automation — all from one dashboard.
+    </p>
+    <div class="hero-actions">
+      <a href="{{ url_for('register') }}" class="btn btn-primary btn-lg">Get Started</a>
+      <a href="{{ url_for('login') }}" class="btn btn-outline btn-lg">Login</a>
+    </div>
+  </header>
+
+  <section class="section" id="about">
+    <h2>About MEDBOT</h2>
+    <p>MEDBOT is a smart, robotic medicine dispenser that combines scheduled dosing,
+    face-verified identity checks, and caretaker notifications to help patients take
+    the right medicine at the right time — and keep caretakers informed when they don't.</p>
+  </section>
+
+  <section class="section" id="features">
+    <h2>Key Features</h2>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <h3>Smart Compartments</h3>
+        <p>Independent medicine compartments with live stock tracking and refill alerts.</p>
+      </div>
+      <div class="feature-card">
+        <h3>Face Recognition</h3>
+        <p>Multi-angle patient verification before medicine is marked as collected.</p>
+      </div>
+      <div class="feature-card">
+        <h3>Smart Scheduling</h3>
+        <p>Multiple daily schedules per medicine with reminders and countdowns.</p>
+      </div>
+      <div class="feature-card">
+        <h3>Caretaker Alerts</h3>
+        <p>SMS, WhatsApp and email notifications for missed doses, low stock and more.</p>
+      </div>
+      <div class="feature-card">
+        <h3>Battery Monitoring</h3>
+        <p>Real-time LiFePO4 voltage tracking with automatic safety cutoffs.</p>
+      </div>
+      <div class="feature-card">
+        <h3>Hardware Automation</h3>
+        <p>ESP32-driven dispensing and patient search, with full simulation mode when offline.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="how-it-works">
+    <h2>How It Works</h2>
+    <ol class="how-it-works-list">
+      <li>Register your patient profile and caretaker contact details.</li>
+      <li>Add medicines and assign them to compartments.</li>
+      <li>Set schedules — MEDBOT reminds, verifies, and dispenses automatically.</li>
+      <li>Caretakers are notified for missed doses, low stock, or low battery.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="modes">
+    <h2>Fixed Position Mode</h2>
+    <p>MEDBOT stays stationary with its motors disabled. Scheduling, reminders, dispensing,
+    face verification and notifications all remain fully active — only movement is switched off.</p>
+  </section>
+
+  <section class="section" id="move-mode">
+    <h2>Move Mode</h2>
+    <p>MEDBOT actively searches for the scheduled patient using PIR motion sensing and
+    ultrasonic obstacle avoidance, verifying identity by face once the patient is found.</p>
+  </section>
+
+  <section class="section" id="battery">
+    <h2>Battery Monitoring</h2>
+    <p>A LiFePO4 pack is tracked in real time — percentage, voltage, and charging status —
+    with automatic safety cutoffs. Below 20%, MEDBOT stops all movement and switches to
+    Fixed Position Mode until it's charged.</p>
+  </section>
+
+  <section class="section" id="compartments">
+    <h2>Smart Medicine Compartments</h2>
+    <p>Every medicine lives in its own independent compartment with live stock tracking,
+    automatic low-stock and empty alerts, and one-tap refilling — so the right dose always
+    comes from the right compartment.</p>
+  </section>
+
+  <section class="section" id="face-recognition">
+    <h2>Face Recognition</h2>
+    <p>Multi-angle facial verification (front, slight left, slight right, up, down) confirms
+    the correct patient is present before medicine is marked as collected — with explicit
+    consent required before any face data is stored.</p>
+  </section>
+
+  <section class="section" id="notification-system">
+    <h2>Notification System</h2>
+    <p>Reminders, dispensing confirmations, missed-dose alerts, and low-stock/battery warnings
+    reach the patient and caretaker over SMS, WhatsApp, or email — with automatic simulation
+    when no messaging credentials are configured.</p>
+  </section>
+
+  <section class="section" id="technology">
+    <h2>Technology Used</h2>
+    <p>Flask, SQLite, OpenCV, face_recognition, APScheduler, Twilio, ESP32, and a responsive
+    vanilla HTML/CSS/JS frontend.</p>
+  </section>
+
+  <section class="section" id="innovation">
+    <h2>Project Innovation</h2>
+    <p>MEDBOT combines scheduled dosing, physical robotics, and biometric verification into
+    one system — and unlike many hardware-dependent prototypes, every feature runs and can be
+    demonstrated entirely in software through Hardware Simulation Mode, even with no physical
+    robot connected.</p>
+  </section>
+
+  <footer class="landing-footer">
+    <p>MEDBOT — Intelligent Pill Dispenser and Patient Assistance System. College project prototype.</p>
+  </footer>
+
+</div>
+{% endblock %}

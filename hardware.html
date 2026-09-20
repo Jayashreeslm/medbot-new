@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Hardware — MEDBOT{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Hardware</h1>
+  <p class="page-subtitle">ESP32 connection, operating mode, battery, and manual controls</p>
+</div>
+
+<div class="section-card">
+  <h2>Operating Mode</h2>
+  <p class="page-subtitle">Switching to Move Mode is blocked automatically if the battery is critical.</p>
+  <div class="mode-buttons">
+    <button class="btn {{ 'btn-primary' if user.operating_mode == 'fixed' else 'btn-outline' }}" onclick="switchMode('fixed')">
+      Fixed Position Mode {{ '(Active)' if user.operating_mode == 'fixed' }}
+    </button>
+    <button class="btn {{ 'btn-primary' if user.operating_mode == 'move' else 'btn-outline' }}" onclick="switchMode('move')">
+      Move Mode {{ '(Active)' if user.operating_mode == 'move' }}
+    </button>
+  </div>
+  <div id="modeResult" class="test-result hidden"></div>
+</div>
+
+<div class="section-card">
+  <h2>Battery</h2>
+  <div class="widget-grid">
+    <div class="widget-card">
+      <span class="widget-label">Percentage</span>
+      <span class="widget-value" id="batteryPercentage">{{ battery.percentage if battery else '—' }}%</span>
+      <span class="status-badge status-{{ (battery.status | lower) if battery else 'unknown' }}" id="batteryStatusBadge">{{ battery.status if battery else 'UNKNOWN' }}</span>
+    </div>
+    <div class="widget-card">
+      <span class="widget-label">Voltage</span>
+      <span class="widget-value" id="batteryVoltage">{{ battery.voltage if battery else '—' }}V</span>
+    </div>
+    <div class="widget-card">
+      <span class="widget-label">Chemistry / Config</span>
+      <span class="widget-value stat-small">{{ battery.chemistry if battery else '—' }} · {{ battery.series_cells if battery else '?' }}S{{ battery.parallel_cells if battery else '?' }}P</span>
+    </div>
+    <div class="widget-card">
+      <span class="widget-label">Charging</span>
+      <span class="widget-value" id="batteryCharging">{{ 'Yes' if battery and battery.charging else 'No' }}</span>
+    </div>
+  </div>
+  <p class="page-subtitle">Simulate a battery reading (in volts) to test status changes and safety cutoffs:</p>
+  <div class="modal-form-row">
+    <div>
+      <label for="sim_voltage">Simulated Voltage (V)</label>
+      <input type="number" step="0.1" id="sim_voltage" value="{{ battery.voltage if battery else 14.6 }}">
+    </div>
+    <div>
+      <label for="sim_charging">Charging?</label>
+      <select id="sim_charging"><option value="false">No</option><option value="true">Yes</option></select>
+    </div>
+  </div>
+  <button class="btn btn-outline" onclick="simulateBattery()">Apply Reading</button>
+  <div id="batteryResult" class="test-result hidden"></div>
+</div>
+
+<div class="section-card">
+  <h2>Connection Status</h2>
+  <div class="widget-grid">
+    <div class="widget-card">
+      <span class="widget-label">Status</span>
+      <span class="widget-value" id="connectionStatusText">
+        {{ 'Connected' if config and config.connection_status == 'connected' else 'Simulation Mode' }}
+      </span>
+      <span class="status-badge {{ 'status-excellent' if config and config.connection_status == 'connected' else 'status-unknown' }}" id="connectionBadge">
+        {{ 'HARDWARE CONNECTED' if config and config.connection_status == 'connected' else 'HARDWARE SIMULATION MODE ACTIVE' }}
+      </span>
+    </div>
+    <div class="widget-card">
+      <span class="widget-label">Last Communication</span>
+      <span class="widget-value stat-small" id="lastSeenText">{{ config.last_seen if config and config.last_seen else 'Never' }}</span>
+    </div>
+  </div>
+  <button class="btn btn-primary" onclick="testConnection()">Test Connection</button>
+</div>
+
+<div class="section-card">
+  <h2>ESP32 Configuration</h2>
+  <form id="hardwareConfigForm" class="modal-form-row">
+    <div>
+      <label for="esp32_ip">ESP32 IP Address</label>
+      <input type="text" id="esp32_ip" value="{{ config.esp32_ip if config else '192.168.1.50' }}" required>
+    </div>
+    <div>
+      <label for="esp32_port">Port</label>
+      <input type="number" id="esp32_port" value="{{ config.port if config else 80 }}" required>
+    </div>
+  </form>
+  <div id="configErrors" class="form-errors hidden"></div>
+  <button class="btn btn-outline" onclick="saveConfig()">Save Configuration</button>
+</div>
+
+<div class="section-card">
+  <h2>Manual Controls</h2>
+  <p class="page-subtitle">Every command below works even if the ESP32 is offline — it will run in simulation mode automatically.</p>
+
+  <h3 class="control-group-title">Dispensing &amp; Verification</h3>
+  <div class="control-buttons">
+    <button class="btn btn-outline" onclick="sendCommand('DISPENSE_MEDICINE')">Dispense Medicine</button>
+    <button class="btn btn-outline" onclick="sendCommand('CHECK_PATIENT')">Check Patient</button>
+    <button class="btn btn-outline" onclick="sendCommand('ACTIVATE_BUZZER')">Activate Buzzer</button>
+  </div>
+
+  <h3 class="control-group-title">Movement (Move Mode only)</h3>
+  <div class="control-buttons">
+    <button class="btn btn-outline" onclick="sendMovement('forward')">Move Forward</button>
+    <button class="btn btn-outline" onclick="sendMovement('backward')">Move Backward</button>
+    <button class="btn btn-outline" onclick="sendMovement('left')">Turn Left</button>
+    <button class="btn btn-outline" onclick="sendMovement('right')">Turn Right</button>
+    <button class="btn btn-danger" onclick="sendMovement('stop')">Stop Motors</button>
+  </div>
+
+  <h3 class="control-group-title">Patient Search</h3>
+  <div class="control-buttons">
+    <button class="btn btn-outline" onclick="searchStart()">Start Search</button>
+    <button class="btn btn-outline" onclick="searchStop()">Stop Search</button>
+  </div>
+
+  <div id="commandResult" class="test-result hidden"></div>
+</div>
+
+<script src="{{ url_for('static', filename='js/hardware.js') }}"></script>
+{% endblock %}

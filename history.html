@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}History — MEDBOT{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Medicine History</h1>
+  <p class="page-subtitle">Full record of reminders, dispensing, collection, refills, and failures</p>
+</div>
+
+<form method="GET" action="{{ url_for('history_page') }}" class="filter-bar">
+  <select name="range" onchange="this.form.submit()">
+    <option value="all" {{ 'selected' if range_filter == 'all' }}>All Time</option>
+    <option value="today" {{ 'selected' if range_filter == 'today' }}>Today</option>
+    <option value="week" {{ 'selected' if range_filter == 'week' }}>This Week</option>
+    <option value="month" {{ 'selected' if range_filter == 'month' }}>This Month</option>
+  </select>
+  <select name="medicine_id" onchange="this.form.submit()">
+    <option value="">All Medicines</option>
+    {% for m in medicines %}
+    <option value="{{ m.id }}" {{ 'selected' if medicine_id == m.id }}>{{ m.medicine_name }}</option>
+    {% endfor %}
+  </select>
+  <input type="text" name="search" placeholder="Search medicine name..." value="{{ search }}">
+  <button type="submit" class="btn btn-outline">Filter</button>
+</form>
+
+{% if records %}
+<div class="section-card">
+  <table class="notif-table history-table">
+    <thead>
+      <tr>
+        <th>Date/Time</th><th>Medicine</th><th>Compartment</th><th>Event</th>
+        <th>Scheduled</th><th>Dispensed</th><th>Collected</th>
+        <th>Recognition</th><th>Status</th><th>Mode</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in records %}
+      <tr>
+        <td class="stat-small">{{ r.created_at }}</td>
+        <td>{{ r.medicine_name or '—' }}</td>
+        <td>{{ r.compartment_number or '—' }}</td>
+        <td><span class="event-pill event-{{ r.event_type | lower }}">{{ r.event_type.replace('_', ' ') }}</span></td>
+        <td class="stat-small">{{ r.scheduled_time or '—' }}</td>
+        <td class="stat-small">{{ r.dispensed_time or '—' }}</td>
+        <td class="stat-small">{{ r.collection_time or '—' }}</td>
+        <td class="stat-small">{{ r.recognition_status or '—' }}</td>
+        <td class="stat-small">{{ r.collected_status or '—' }}</td>
+        <td class="stat-small">{{ r.operating_mode or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="section-card empty-state">
+  <p>No history records match your filters.</p>
+</div>
+{% endif %}
+{% endblock %}

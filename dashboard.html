@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — MEDBOT{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Welcome, {{ user['name'] }}</h1>
+  <p class="page-subtitle">Here's what's happening with MEDBOT right now.</p>
+</div>
+
+<div class="widget-grid">
+  <div class="widget-card">
+    <span class="widget-label">Operating Mode</span>
+    <span class="widget-value">{{ 'Fixed Position' if user['operating_mode'] == 'fixed' else 'Move Mode' }}</span>
+  </div>
+  <div class="widget-card">
+    <span class="widget-label">Active Medicines</span>
+    <span class="widget-value">{{ medicine_count }}</span>
+  </div>
+  <div class="widget-card">
+    <span class="widget-label">Battery</span>
+    <span class="widget-value">{{ battery['percentage'] | round(0) if battery else '—' }}%</span>
+    <span class="status-badge status-{{ (battery['status'] | lower) if battery else 'unknown' }}">{{ battery['status'] if battery else 'UNKNOWN' }}</span>
+  </div>
+  <div class="widget-card">
+    <span class="widget-label">Hardware</span>
+    <span class="widget-value">{{ 'Connected' if hardware and hardware['connection_status'] == 'connected' else 'Simulation Mode' }}</span>
+  </div>
+</div>
+
+<div class="section-card">
+  <h2>Getting Started</h2>
+  <p>Your account is set up. Add medicines and schedules to start using MEDBOT's dispensing and reminder features.</p>
+</div>
+{% endblock %}

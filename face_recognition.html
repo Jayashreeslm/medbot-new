@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Face Recognition — MEDBOT{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Face Recognition</h1>
+  <p class="page-subtitle">Multi-angle patient verification (front, slight left, right, up, down)</p>
+</div>
+
+{% if not dependencies_available %}
+<div class="section-card dependency-warning">
+  <h2>Face Recognition Unavailable</h2>
+  <p>The required packages are not installed on this machine. Run the following in your terminal, then restart MEDBOT:</p>
+  <code>pip install opencv-python face_recognition numpy</code>
+</div>
+{% endif %}
+
+<div class="section-card">
+  <h2>Registration Status</h2>
+  <div class="widget-grid">
+    <div class="widget-card">
+      <span class="widget-label">Samples Registered</span>
+      <span class="widget-value">{{ status.total_samples }} / 5</span>
+    </div>
+    <div class="widget-card">
+      <span class="widget-label">Consent Given</span>
+      <span class="widget-value">{{ 'Yes' if status.consent_given else 'No' }}</span>
+    </div>
+    <div class="widget-card">
+      <span class="widget-label">Angles Remaining</span>
+      <span class="widget-value stat-small">{{ status.angles_remaining | join(', ') if status.angles_remaining else 'None' }}</span>
+    </div>
+  </div>
+</div>
+
+<div class="section-card">
+  <h2>Camera</h2>
+  <div class="camera-area">
+    <video id="cameraFeed" autoplay playsinline class="camera-feed"></video>
+    <canvas id="captureCanvas" class="hidden"></canvas>
+  </div>
+  <div class="camera-controls">
+    <button class="btn btn-outline" id="startCameraBtn" onclick="startCamera()">Start Camera</button>
+    <button class="btn btn-outline" id="stopCameraBtn" onclick="stopCamera()" disabled>Stop Camera</button>
+  </div>
+</div>
+
+<div class="section-card">
+  <h2>Register Face</h2>
+  <label class="consent-label">
+    <input type="checkbox" id="consentCheckbox">
+    I consent to MEDBOT storing and processing my facial data for this project.
+  </label>
+  <p id="captureInstruction" class="capture-instruction">Click "Capture Next Angle" and follow the prompt.</p>
+  <div id="registerErrors" class="form-errors hidden"></div>
+  <div class="camera-controls">
+    <button class="btn btn-primary" id="captureBtn" onclick="captureNextAngle()" disabled>Capture Next Angle</button>
+  </div>
+</div>
+
+<div class="section-card">
+  <h2>Recognition Test</h2>
+  <button class="btn btn-primary" id="recognizeBtn" onclick="runRecognition()" disabled>Start Recognition</button>
+  <div id="recognitionResult" class="recognition-result hidden"></div>
+</div>
+
+<div class="section-card">
+  <h2>Danger Zone</h2>
+  <button class="btn btn-danger" onclick="deleteFaceData()">Delete Face Data</button>
+</div>
+
+<script>
+  const ANGLE_SEQUENCE = {{ status.angles_remaining | tojson }};
+  const ANGLE_PROMPTS = {
+    front: "Look straight at the camera (Front)",
+    left: "Turn your head slightly LEFT",
+    right: "Turn your head slightly RIGHT",
+    up: "Tilt your head slightly UP",
+    down: "Tilt your head slightly DOWN"
+  };
+</script>
+<script src="{{ url_for('static', filename='js/face.js') }}"></script>
+{% endblock %}

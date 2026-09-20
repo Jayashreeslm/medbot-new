@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Login — MEDBOT{% endblock %}
+{% block guest_content %}
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="auth-brand"><span class="brand-icon">⚕</span> MEDBOT</div>
+    <h1>Welcome back</h1>
+    <p class="auth-subtitle">Log in to your MEDBOT account</p>
+    <form method="POST" action="{{ url_for('login') }}" class="auth-form">
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" value="{{ form.email if form else '' }}" required>
+
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" required>
+
+      <button type="submit" class="btn btn-primary btn-block">Login</button>
+    </form>
+    <p class="auth-switch">Don't have an account? <a href="{{ url_for('register') }}">Register</a></p>
+    <p class="auth-switch"><a href="{{ url_for('index') }}">← Back to home</a></p>
+  </div>
+</div>
+{% endblock %}

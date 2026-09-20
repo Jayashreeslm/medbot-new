@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Medicines — MEDBOT{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-header-row">
+    <div>
+      <h1>Medicines</h1>
+      <p class="page-subtitle">Manage medicine compartments and stock levels</p>
+    </div>
+    <button class="btn btn-primary" onclick="openAddModal()">+ Add Medicine</button>
+  </div>
+</div>
+
+<form method="GET" action="{{ url_for('medicines_page') }}" class="filter-bar">
+  <input type="text" name="search" placeholder="Search medicine name..." value="{{ search }}">
+  <select name="status" onchange="this.form.submit()">
+    <option value="all" {{ 'selected' if status_filter == 'all' }}>All Medicines</option>
+    <option value="active" {{ 'selected' if status_filter == 'active' }}>Active Only</option>
+    <option value="inactive" {{ 'selected' if status_filter == 'inactive' }}>Inactive Only</option>
+  </select>
+  <button type="submit" class="btn btn-outline">Filter</button>
+</form>
+
+{% if medicines %}
+<div class="compartment-grid">
+  {% for m in medicines %}
+  <div class="compartment-card">
+    <div class="compartment-header">
+      <span class="compartment-number">Compartment {{ m.compartment_number }}</span>
+      <span class="stock-badge stock-{{ m.stock_status | lower }}">
+        {% if m.stock_status == 'AVAILABLE' %}STOCK AVAILABLE
+        {% elif m.stock_status == 'LOW' %}LOW STOCK
+        {% else %}EMPTY{% endif %}
+      </span>
+    </div>
+    <h3>{{ m.medicine_name }}</h3>
+    <p class="compartment-dosage">{{ m.dosage }}</p>
+    {% if m.description %}<p class="compartment-desc">{{ m.description }}</p>{% endif %}
+
+    <div class="compartment-stats">
+      <div><span class="stat-label">Current Qty</span><span class="stat-value">{{ m.quantity }}</span></div>
+      <div><span class="stat-label">Initial Qty</span><span class="stat-value">{{ m.initial_quantity }}</span></div>
+      <div><span class="stat-label">Refill At</span><span class="stat-value">{{ m.refill_threshold }}</span></div>
+      <div><span class="stat-label">Status</span><span class="stat-value">{{ 'Active' if m.active else 'Inactive' }}</span></div>
+    </div>
+    <div class="compartment-stats">
+      <div><span class="stat-label">Last Dispensed</span><span class="stat-value stat-small">{{ m.last_dispensed_at or '—' }}</span></div>
+      <div><span class="stat-label">Last Refilled</span><span class="stat-value stat-small">{{ m.last_refilled_at or '—' }}</span></div>
+    </div>
+
+    <div class="compartment-actions">
+      <button class="btn btn-outline btn-sm" onclick='openEditModal({{ m | tojson }})'>Edit</button>
+      <button class="btn btn-outline btn-sm" onclick='openRefillModal({{ m.id }}, "{{ m.medicine_name }}")'>Refill</button>
+      <button class="btn btn-outline btn-sm" onclick="toggleActive({{ m.id }}, {{ m.active }})">
+        {{ 'Deactivate' if m.active else 'Activate' }}
+      </button>
+      <button class="btn btn-danger btn-sm" onclick="deleteMedicine({{ m.id }}, '{{ m.medicine_name }}')">Delete</button>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="section-card empty-state">
+  <p>No medicines found. Click "+ Add Medicine" to assign your first compartment.</p>
+</div>
+{% endif %}
+
+<!-- Add/Edit Modal -->
+<div id="medicineModal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h2 id="modalTitle">Add Medicine</h2>
+    <form id="medicineForm">
+      <input type="hidden" id="medicineId" value="">
+      <label for="medicine_name">Medicine Name</label>
+      <input type="text" id="medicine_name" required>
+
+      <label for="dosage">Dosage</label>
+      <input type="text" id="dosage" placeholder="e.g. 500mg, 1 tablet" required>
+
+      <div class="modal-form-row">
+        <div>
+          <label for="quantity">Quantity</label>
+          <input type="number" id="quantity" min="0" required>
+        </div>
+        <div>
+          <label for="compartment_number">Compartment #</label>
+          <input type="number" id="compartment_number" min="1" required>
+        </div>
+      </div>
+
+      <label for="refill_threshold">Refill Threshold</label>
+      <input type="number" id="refill_threshold" min="0" required>
+
+      <label for="description">Description (optional)</label>
+      <textarea id="description" rows="2"></textarea>
+
+      <div id="formErrors" class="form-errors hidden"></div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline" onclick="closeModal('medicineModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Medicine</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Refill Modal -->
+<div id="refillModal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h2>Refill Medicine</h2>
+    <p id="refillMedicineName" class="modal-subtitle"></p>
+    <form id="refillForm">
+      <input type="hidden" id="refillMedicineId" value="">
+      <label for="quantity_added">Quantity to Add</label>
+      <input type="number" id="quantity_added" min="1" required>
+      <div id="refillErrors" class="form-errors hidden"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline" onclick="closeModal('refillModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Refill</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/medicines.js') }}"></script>
+{% endblock %}

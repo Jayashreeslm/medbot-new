@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Register — MEDBOT{% endblock %}
+{% block guest_content %}
+<div class="auth-page">
+  <div class="auth-card auth-card-wide">
+    <div class="auth-brand"><span class="brand-icon">⚕</span> MEDBOT</div>
+    <h1>Create your account</h1>
+    <p class="auth-subtitle">Register the patient and caretaker for this MEDBOT profile</p>
+    <form method="POST" action="{{ url_for('register') }}" class="auth-form auth-form-grid">
+      <div>
+        <label for="name">Patient Name</label>
+        <input type="text" id="name" name="name" value="{{ form.name if form else '' }}" required>
+      </div>
+      <div>
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" value="{{ form.email if form else '' }}" required>
+      </div>
+      <div>
+        <label for="phone">Patient Mobile Number</label>
+        <input type="tel" id="phone" name="phone" placeholder="10-digit mobile number" value="{{ form.phone if form else '' }}" required>
+      </div>
+      <div>
+        <label for="caretaker_name">Caretaker Name</label>
+        <input type="text" id="caretaker_name" name="caretaker_name" value="{{ form.caretaker_name if form else '' }}" required>
+      </div>
+      <div>
+        <label for="caretaker_phone">Caretaker Mobile Number</label>
+        <input type="tel" id="caretaker_phone" name="caretaker_phone" placeholder="10-digit mobile number" value="{{ form.caretaker_phone if form else '' }}" required>
+      </div>
+      <div></div>
+      <div>
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" minlength="6" required>
+      </div>
+      <div>
+        <label for="confirm_password">Confirm Password</label>
+        <input type="password" id="confirm_password" name="confirm_password" minlength="6" required>
+      </div>
+      <div class="form-span-2">
+        <button type="submit" class="btn btn-primary btn-block">Register</button>
+      </div>
+    </form>
+    <p class="auth-switch">Already have an account? <a href="{{ url_for('login') }}">Login</a></p>
+    <p class="auth-switch"><a href="{{ url_for('index') }}">← Back to home</a></p>
+  </div>
+</div>
+{% endblock %}

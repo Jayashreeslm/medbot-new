@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Schedules — MEDBOT{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-header-row">
+    <div>
+      <h1>Schedules</h1>
+      <p class="page-subtitle">Set dosing times for each medicine</p>
+    </div>
+    {% if medicines %}
+    <button class="btn btn-primary" onclick="openAddScheduleModal()">+ Add Schedule</button>
+    {% endif %}
+  </div>
+</div>
+
+{% if not medicines %}
+<div class="section-card empty-state">
+  <p>You need at least one active medicine before creating a schedule. Add one on the Medicines page first.</p>
+</div>
+{% elif not schedules %}
+<div class="section-card empty-state">
+  <p>No schedules yet. Click "+ Add Schedule" to set your first reminder time.</p>
+</div>
+{% else %}
+<div class="schedule-list">
+  {% for s in schedules %}
+  <div class="schedule-card {{ 'schedule-disabled' if not s.enabled }}">
+    <div class="schedule-main">
+      <span class="schedule-time">{{ s.schedule_time }}</span>
+      <div>
+        <strong>{{ s.medicine_name }}</strong>
+        <span class="schedule-meta">{{ s.dosage }} · Compartment {{ s.compartment_number }}</span>
+        <span class="schedule-days">{{ 'Every day' if s.schedule_days == 'daily' else s.schedule_days }}</span>
+      </div>
+    </div>
+    <div class="schedule-countdown" data-next-trigger="{{ s.next_trigger or '' }}">
+      {% if s.enabled and s.next_trigger %}
+        <span class="countdown-label">Next dose in</span>
+        <span class="countdown-value">—</span>
+      {% else %}
+        <span class="countdown-label">Disabled</span>
+      {% endif %}
+    </div>
+    <div class="schedule-actions">
+      <button class="btn btn-outline btn-sm" onclick='openEditScheduleModal({{ s | tojson }})'>Edit</button>
+      <button class="btn btn-outline btn-sm" onclick="toggleSchedule({{ s.id }})">
+        {{ 'Disable' if s.enabled else 'Enable' }}
+      </button>
+      <button class="btn btn-danger btn-sm" onclick="deleteSchedule({{ s.id }})">Delete</button>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Add/Edit Schedule Modal -->
+<div id="scheduleModal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h2 id="scheduleModalTitle">Add Schedule</h2>
+    <form id="scheduleForm">
+      <input type="hidden" id="scheduleId" value="">
+
+      <label for="schedule_medicine_id">Medicine</label>
+      <select id="schedule_medicine_id" required>
+        {% for m in medicines %}
+        <option value="{{ m.id }}">{{ m.medicine_name }} (Compartment {{ m.compartment_number }})</option>
+        {% endfor %}
+      </select>
+
+      <label for="schedule_time">Time</label>
+      <input type="time" id="schedule_time" required>
+
+      <label for="schedule_days">Repeat</label>
+      <select id="schedule_days_mode" onchange="toggleDayPicker()">
+        <option value="daily">Every day</option>
+        <option value="custom">Specific days</option>
+      </select>
+
+      <div id="dayPicker" class="day-picker hidden">
+        <label><input type="checkbox" value="MO"> Mon</label>
+        <label><input type="checkbox" value="TU"> Tue</label>
+        <label><input type="checkbox" value="WE"> Wed</label>
+        <label><input type="checkbox" value="TH"> Thu</label>
+        <label><input type="checkbox" value="FR"> Fri</label>
+        <label><input type="checkbox" value="SA"> Sat</label>
+        <label><input type="checkbox" value="SU"> Sun</label>
+      </div>
+
+      <div id="scheduleErrors" class="form-errors hidden"></div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline" onclick="closeModal('scheduleModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Schedule</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/schedule.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Notifications — MEDBOT{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Notifications</h1>
+  <p class="page-subtitle">Notification history and test sending</p>
+</div>
+
+<div class="section-card">
+  <h2>Send Test Notification</h2>
+  <form id="testNotificationForm" class="test-notif-form">
+    <select id="test_channel">
+      <option value="sms">SMS</option>
+      <option value="whatsapp">WhatsApp</option>
+      <option value="email">Email</option>
+    </select>
+    <input type="text" id="test_message" placeholder="Message to send" value="This is a test notification from MEDBOT." required>
+    <button type="submit" class="btn btn-primary">Send</button>
+  </form>
+  <div id="testResult" class="test-result hidden"></div>
+</div>
+
+<div class="section-card">
+  <h2>History</h2>
+  {% if notifications %}
+  <table class="notif-table">
+    <thead>
+      <tr>
+        <th>Date/Time</th><th>Recipient</th><th>Type</th><th>Message</th><th>Channel</th><th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for n in notifications %}
+      <tr>
+        <td class="stat-small">{{ n.created_at }}</td>
+        <td>{{ n.recipient_number }}</td>
+        <td>{{ n.notification_type }}</td>
+        <td class="notif-message">{{ n.message }}</td>
+        <td>{{ n.channel | upper }}</td>
+        <td><span class="status-pill status-{{ n.status | lower }}">{{ n.status }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty-state">No notifications yet.</p>
+  {% endif %}
+</div>
+
+<script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
+{% endblock %}
