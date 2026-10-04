@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% block title %}History — MEDBOT{% endblock %}
+{% block page_breadcrumb %}Care records{% endblock %}
+{% block page_title %}Medicine History{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Medicine History</h1>
@@ -25,6 +27,7 @@
 
 {% if records %}
 <div class="section-card">
+  <div class="table-scroll">
   <table class="notif-table history-table">
     <thead>
       <tr>
@@ -36,13 +39,13 @@
     <tbody>
       {% for r in records %}
       <tr>
-        <td class="stat-small">{{ r.created_at }}</td>
+        <td class="stat-small">{{ formatDateTime(r.created_at) }}</td>
         <td>{{ r.medicine_name or '—' }}</td>
         <td>{{ r.compartment_number or '—' }}</td>
         <td><span class="event-pill event-{{ r.event_type | lower }}">{{ r.event_type.replace('_', ' ') }}</span></td>
-        <td class="stat-small">{{ r.scheduled_time or '—' }}</td>
-        <td class="stat-small">{{ r.dispensed_time or '—' }}</td>
-        <td class="stat-small">{{ r.collection_time or '—' }}</td>
+        <td class="stat-small">{{ formatDateTime(r.scheduled_time) }}</td>
+        <td class="stat-small">{{ formatDateTime(r.dispensed_time) }}</td>
+        <td class="stat-small">{{ formatDateTime(r.collection_time) }}</td>
         <td class="stat-small">{{ r.recognition_status or '—' }}</td>
         <td class="stat-small">{{ r.collected_status or '—' }}</td>
         <td class="stat-small">{{ r.operating_mode or '—' }}</td>
@@ -50,6 +53,7 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 {% else %}
 <div class="section-card empty-state">

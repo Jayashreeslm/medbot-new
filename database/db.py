@@ -2,7 +2,10 @@ import sqlite3
 import os
 import sys
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
 import config
 
 
@@ -11,6 +14,7 @@ def get_connection():
     conn = sqlite3.connect(config.DATABASE_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 3000")
     return conn
 
 
@@ -25,6 +29,7 @@ def init_db():
         name TEXT NOT NULL,
         email TEXT NOT NULL UNIQUE,
         phone TEXT NOT NULL,
+        notification_preference TEXT NOT NULL DEFAULT 'both',
         caretaker_name TEXT NOT NULL,
         caretaker_phone TEXT NOT NULL,
         password_hash TEXT NOT NULL,
@@ -39,6 +44,10 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         patient_id INTEGER NOT NULL,
         medicine_name TEXT NOT NULL,
+        batch_no TEXT,
+        expiry_date TEXT,
+        price REAL NOT NULL DEFAULT 0,
+        refill_due_date TEXT,
         dosage TEXT NOT NULL,
         quantity INTEGER NOT NULL DEFAULT 0,
         initial_quantity INTEGER NOT NULL DEFAULT 0,
@@ -93,6 +102,12 @@ def init_db():
         notification_type TEXT NOT NULL,
         channel TEXT NOT NULL,
         status TEXT NOT NULL,
+        error TEXT,
+        error_code TEXT,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        sent_at TEXT,
+        next_retry_at TEXT,
+        provider_message_id TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (patient_id) REFERENCES users(id) ON DELETE CASCADE
     );
@@ -139,6 +154,36 @@ def init_db():
         FOREIGN KEY (patient_id) REFERENCES users(id) ON DELETE CASCADE
     );
     """)
+
+    # Keep existing local databases usable as the application schema grows.
+    migrations = {
+        "users": {
+            "notification_preference": "TEXT NOT NULL DEFAULT 'both'",
+        },
+        "medicines": {
+            "batch_no": "TEXT",
+            "expiry_date": "TEXT",
+            "price": "REAL NOT NULL DEFAULT 0",
+            "refill_due_date": "TEXT",
+        },
+        "notifications": {
+            "error": "TEXT",
+            "error_code": "TEXT",
+            "retry_count": "INTEGER NOT NULL DEFAULT 0",
+            "sent_at": "TEXT",
+            "next_retry_at": "TEXT",
+            "provider_message_id": "TEXT",
+            "is_read": "INTEGER NOT NULL DEFAULT 0",
+            "read_at": "TEXT",
+            "title": "TEXT",
+            "icon": "TEXT",
+        },
+    }
+    for table, columns in migrations.items():
+        existing_columns = {row["name"] for row in cur.execute(f"PRAGMA table_info({table})")}
+        for column, definition in columns.items():
+            if column not in existing_columns:
+                cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     conn.commit()
     conn.close()

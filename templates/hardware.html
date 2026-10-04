@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Hardware — MEDBOT{% endblock %}
+{% block page_breadcrumb %}Device operations{% endblock %}
+{% block page_title %}Hardware{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Hardware</h1>
@@ -41,6 +43,12 @@
       <span class="widget-value" id="batteryCharging">{{ 'Yes' if battery and battery.charging else 'No' }}</span>
     </div>
   </div>
+  <div class="battery-meter status-{{ (battery.status | lower) if battery else 'unknown' }}" id="batteryMeter">
+    <div class="battery-meter__label"><span>Battery level</span><strong id="batteryMeterValue">{{ battery.percentage | round(0) if battery else 0 }}%</strong></div>
+    <div class="battery-track {{ 'is-critical' if battery and battery.percentage < 20 else 'is-low' if battery and battery.percentage < 30 }}" role="progressbar" aria-label="Battery charge" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ battery.percentage if battery else 0 }}" id="batteryProgress">
+      <span id="batteryProgressFill" style="width: {{ battery.percentage if battery else 0 }}%"></span>
+    </div>
+  </div>
   <p class="page-subtitle">Simulate a battery reading (in volts) to test status changes and safety cutoffs:</p>
   <div class="modal-form-row">
     <div>
@@ -70,7 +78,7 @@
     </div>
     <div class="widget-card">
       <span class="widget-label">Last Communication</span>
-      <span class="widget-value stat-small" id="lastSeenText">{{ config.last_seen if config and config.last_seen else 'Never' }}</span>
+      <span class="widget-value stat-small" id="lastSeenText">{{ formatDateTime(config.last_seen) if config and config.last_seen else 'Never' }}</span>
     </div>
   </div>
   <button class="btn btn-primary" onclick="testConnection()">Test Connection</button>

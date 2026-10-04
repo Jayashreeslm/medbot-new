@@ -1,7 +1,7 @@
-from datetime import datetime
 import requests
 
 from database.db import get_connection
+from services.time_service import database_timestamp
 
 REQUEST_TIMEOUT = 2.0  # seconds — keep short so the UI never hangs waiting on an offline ESP32
 
@@ -35,7 +35,7 @@ def _set_connection_status(patient_id, connected):
     conn.execute(
         "UPDATE hardware SET connection_status = ?, last_seen = ? WHERE patient_id = ?",
         ("connected" if connected else "disconnected",
-         datetime.now().strftime("%Y-%m-%d %H:%M:%S"), patient_id),
+         database_timestamp(), patient_id),
     )
     conn.commit()
     conn.close()
@@ -69,7 +69,7 @@ def send_command(patient_id, command, payload=None):
 
     config = get_config(patient_id)
     payload = payload or {}
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = database_timestamp()
 
     if config:
         url = f"http://{config['esp32_ip']}:{config['port']}/command"

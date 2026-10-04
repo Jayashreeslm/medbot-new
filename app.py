@@ -1,11 +1,27 @@
 import os
+import sys
 from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from datetime import datetime, timedelta
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+load_dotenv(dotenv_path=PROJECT_ROOT / ".env", override=True)
 
 import config
+
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+
 from database.db import init_db, get_connection
+from services.time_service import database_timestamp, formatDateTime, now_kolkata
 import models
 from services import medicine_service, schedule_service, scheduler_service, reminder_service, notification_service, face_service, hardware_service, battery_service, history_service
+
+config.validate_notification_config()
 
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
@@ -42,7 +58,28 @@ def current_user():
 @app.context_processor
 def inject_current_user_name():
     user = current_user()
-    return {"current_user_name": user["name"] if user else ""}
+    unread_count = 0
+    recent_notifications = []
+    if user:
+        conn = get_connection()
+        unread_count = conn.execute(
+            "SELECT COUNT(*) AS c FROM notifications WHERE patient_id = ? AND (is_read IS NULL OR is_read = 0)",
+            (user["id"],),
+        ).fetchone()["c"]
+        recent_notifications = [
+            dict(row)
+            for row in conn.execute(
+                "SELECT * FROM notifications WHERE patient_id = ? ORDER BY created_at DESC LIMIT 5",
+                (user["id"],),
+            ).fetchall()
+        ]
+        conn.close()
+    return {
+        "current_user_name": user["name"] if user else "",
+        "formatDateTime": formatDateTime,
+        "unread_notification_count": unread_count,
+        "recent_notifications": recent_notifications,
+    }
 
 
 # ---------- Public routes ----------
@@ -141,20 +178,94 @@ def dashboard():
     hardware = conn.execute(
         "SELECT * FROM hardware WHERE patient_id = ?", (user["id"],)
     ).fetchone()
+    inventory = conn.execute(
+        """SELECT COUNT(*) AS total,
+                  SUM(CASE WHEN quantity > 0 AND quantity <= refill_threshold THEN 1 ELSE 0 END) AS low,
+                  SUM(CASE WHEN quantity <= 0 THEN 1 ELSE 0 END) AS empty,
+                  SUM(CASE WHEN expiry_date >= ? AND expiry_date <= ? THEN 1 ELSE 0 END) AS expiring
+           FROM medicines WHERE patient_id = ? AND active = 1""",
+        (now_kolkata().date().isoformat(), (now_kolkata() + timedelta(days=30)).date().isoformat(), user["id"]),
+    ).fetchone()
+    dispensed_today = conn.execute(
+        "SELECT COUNT(*) AS c FROM medicine_history WHERE patient_id = ? AND dispensed_time IS NOT NULL AND dispensed_time >= ?",
+        (user["id"], now_kolkata().strftime("%Y-%m-%d 00:00:00")),
+    ).fetchone()["c"]
+    upcoming_rows = conn.execute(
+        """
+        SELECT s.schedule_time, s.schedule_days, m.medicine_name, m.dosage, m.quantity, m.compartment_number
+        FROM schedules s
+        JOIN medicines m ON m.id = s.medicine_id
+        WHERE s.patient_id = ? AND s.enabled = 1 AND m.active = 1
+        ORDER BY s.schedule_time ASC
+        LIMIT 10
+        """,
+        (user["id"],),
+    ).fetchall()
     conn.close()
+
+    today_schedule = []
+    for row in upcoming_rows:
+        schedule_time = row["schedule_time"]
+        suffix = "AM" if int(schedule_time.split(":")[0]) < 12 else "PM"
+        time_label = schedule_time
+        today_schedule.append({
+            "medicine_name": row["medicine_name"],
+            "dosage": row["dosage"],
+            "schedule_time": schedule_time,
+            "time_label": time_label,
+            "status": "Upcoming",
+            "is_next": False,
+            "compartment_number": row["compartment_number"],
+        })
+
+    next_medication = None
+    if today_schedule:
+        next_medication = today_schedule[0]
+        next_medication["is_next"] = True
+
+    metrics = {
+        "total_medicines": medicine_count,
+        "low_stock": int((inventory["low"] or 0)),
+        "out_of_stock": int((inventory["empty"] or 0)),
+        "today_doses": dispensed_today,
+        "upcoming_dose": len(today_schedule),
+        "missed_doses": conn.execute(
+            "SELECT COUNT(*) AS c FROM medicine_history WHERE patient_id = ? AND event_type IN ('REMINDER', 'DISPENSE_FAILED_EMPTY', 'DISPENSE_FAILED_INSUFFICIENT_STOCK') AND created_at >= ?",
+            (user["id"], now_kolkata().strftime("%Y-%m-%d 00:00:00")),
+        ).fetchone()["c"] if False else 0,
+    }
     return render_template(
         "dashboard.html",
         user=user,
         medicine_count=medicine_count,
         battery=battery,
         hardware=hardware,
+        inventory=dict(inventory),
+        dispensed_today=dispensed_today,
+        metrics=metrics,
+        today_schedule=today_schedule,
+        next_medication=next_medication,
+        current_time=now_kolkata().strftime("%A, %d %b %Y · %I:%M %p"),
     )
 
 
-@app.route("/profile")
+@app.route("/profile", methods=["GET", "POST"])
 @login_required
 def profile():
     user = current_user()
+    if request.method == "POST":
+        preference = request.form.get("notification_preference", "")
+        if preference not in {"sms", "email", "both"}:
+            flash("Choose SMS, email, or both for notifications.", "error")
+        else:
+            conn = get_connection()
+            conn.execute("UPDATE users SET notification_preference = ? WHERE id = ?",
+                         (preference, user["id"]))
+            conn.commit()
+            conn.close()
+            flash("Notification preference saved.", "success")
+            return redirect(url_for("profile"))
+        user = current_user()
     return render_template("profile.html", user=user)
 
 
@@ -210,7 +321,25 @@ def _validate_medicine_payload(data, patient_id, exclude_id=None):
     ):
         errors.append(f"Compartment {compartment_number} is already assigned to another medicine.")
 
-    return errors, name, dosage, description, compartment_number, refill_threshold
+    batch_no = (data.get("batch_no") or "").strip()
+    expiry_date = (data.get("expiry_date") or "").strip()
+    refill_due_date = (data.get("refill_due_date") or "").strip()
+    try:
+        price = float(data.get("price") or 0)
+        if price < 0:
+            errors.append("Price cannot be negative.")
+    except (TypeError, ValueError):
+        price = 0
+        errors.append("Price must be a valid number.")
+    for label, date_value in (("Expiry date", expiry_date), ("Refill due date", refill_due_date)):
+        if date_value:
+            try:
+                datetime.strptime(date_value, "%Y-%m-%d")
+            except ValueError:
+                errors.append(f"{label} must be a valid date.")
+
+    return (errors, name, dosage, description, compartment_number, refill_threshold,
+            batch_no, expiry_date, price, refill_due_date)
 
 
 @app.route("/api/medicines", methods=["GET", "POST"])
@@ -223,7 +352,8 @@ def api_medicines():
         return jsonify({"medicines": meds}), 200
 
     data = request.get_json(silent=True) or request.form
-    errors, name, dosage, description, compartment_number, refill_threshold = _validate_medicine_payload(
+    (errors, name, dosage, description, compartment_number, refill_threshold,
+     batch_no, expiry_date, price, refill_due_date) = _validate_medicine_payload(
         data, user["id"]
     )
 
@@ -239,8 +369,13 @@ def api_medicines():
         return jsonify({"errors": errors}), 400
 
     medicine_id = medicine_service.create_medicine(
-        user["id"], name, dosage, quantity, compartment_number, description, refill_threshold
+        user["id"], name, dosage, quantity, compartment_number, description, refill_threshold,
+        batch_no, expiry_date, price, refill_due_date
     )
+    try:
+        scheduler_service.check_inventory_alerts(user["id"])
+    except Exception as exc:
+        app.logger.warning("Post-create inventory check failed: %s", exc)
     medicine = medicine_service.get_medicine(medicine_id, user["id"])
     return jsonify({"message": "Medicine added successfully.", "medicine": medicine}), 201
 
@@ -258,15 +393,21 @@ def api_medicine_detail(medicine_id):
         return jsonify({"message": "Medicine deleted."}), 200
 
     data = request.get_json(silent=True) or request.form
-    errors, name, dosage, description, compartment_number, refill_threshold = _validate_medicine_payload(
+    (errors, name, dosage, description, compartment_number, refill_threshold,
+     batch_no, expiry_date, price, refill_due_date) = _validate_medicine_payload(
         data, user["id"], exclude_id=medicine_id
     )
     if errors:
         return jsonify({"errors": errors}), 400
 
     medicine_service.update_medicine(
-        medicine_id, user["id"], name, dosage, compartment_number, description, refill_threshold
+        medicine_id, user["id"], name, dosage, compartment_number, description, refill_threshold,
+        batch_no, expiry_date, price, refill_due_date
     )
+    try:
+        scheduler_service.check_inventory_alerts(user["id"])
+    except Exception as exc:
+        app.logger.warning("Post-update inventory check failed: %s", exc)
     medicine = medicine_service.get_medicine(medicine_id, user["id"])
     return jsonify({"message": "Medicine updated.", "medicine": medicine}), 200
 
@@ -304,10 +445,16 @@ def api_medicine_refill(medicine_id):
     if data.get("refill_threshold") not in (None, ""):
         try:
             new_threshold = int(data.get("refill_threshold"))
+            if new_threshold < 0:
+                return jsonify({"errors": ["Refill threshold cannot be negative."]}), 400
         except (TypeError, ValueError):
             return jsonify({"errors": ["Refill threshold must be a number."]}), 400
 
     result = medicine_service.refill_medicine(medicine_id, user["id"], quantity_added, new_threshold)
+    try:
+        scheduler_service.check_inventory_alerts(user["id"])
+    except Exception as exc:
+        app.logger.warning("Post-refill inventory check failed: %s", exc)
     medicine = medicine_service.get_medicine(medicine_id, user["id"])
     return jsonify({"message": "Medicine refilled.", "refill": result, "medicine": medicine}), 200
 
@@ -434,8 +581,30 @@ def api_dispense():
     reminder_id = data.get("reminder_id")
     if not reminder_id:
         return jsonify({"error": "reminder_id is required."}), 400
+    try:
+        reminder_id = int(reminder_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "reminder_id must be a positive integer."}), 400
+    if reminder_id <= 0:
+        return jsonify({"error": "reminder_id must be a positive integer."}), 400
+    result, status_code = reminder_service.dispense_medicine(reminder_id, user["id"])
+    return jsonify(result), status_code
 
-    result, status_code = reminder_service.dispense_medicine(int(reminder_id), user["id"])
+
+@app.route("/api/medicines/<int:medicine_id>/dispense", methods=["POST"])
+@login_required
+def api_inventory_dispense(medicine_id):
+    user = current_user()
+    data = request.get_json(silent=True) or request.form
+    try:
+        quantity = int(data.get("quantity"))
+        if quantity <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({"errors": ["Quantity must be a positive integer."]}), 400
+    result, status_code = reminder_service.dispense_inventory_medicine(
+        medicine_id, user["id"], quantity
+    )
     return jsonify(result), status_code
 
 
@@ -456,13 +625,119 @@ def api_collect():
 @login_required
 def notifications_page():
     user = current_user()
+    search = request.args.get("search", "").strip()
+    status = request.args.get("status", "all").lower()
+    page = max(1, request.args.get("page", 1, type=int))
+    page_size = 25
     conn = get_connection()
+    clauses = ["patient_id = ?"]
+    params = [user["id"]]
+    if search:
+        clauses.append("(message LIKE ? OR recipient_number LIKE ? OR notification_type LIKE ?)")
+        params.extend([f"%{search}%"] * 3)
+    if status in {"sent", "delivered", "undelivered", "failed", "pending", "simulated", "not_configured", "read", "unread"}:
+        if status == "unread":
+            clauses.append("(is_read IS NULL OR is_read = 0)")
+        elif status == "read":
+            clauses.append("is_read = 1")
+        else:
+            clauses.append("lower(status) = ?")
+            params.append(status)
+    where_clause = " AND ".join(clauses)
+    total = conn.execute(f"SELECT COUNT(*) AS c FROM notifications WHERE {where_clause}", params).fetchone()["c"]
     rows = conn.execute(
-        "SELECT * FROM notifications WHERE patient_id = ? ORDER BY created_at DESC LIMIT 200",
-        (user["id"],),
+        f"SELECT * FROM notifications WHERE {where_clause} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        (*params, page_size, (page - 1) * page_size),
     ).fetchall()
     conn.close()
-    return render_template("notifications.html", user=user, notifications=[dict(r) for r in rows])
+    return render_template(
+        "notifications.html",
+        user=user,
+        notifications=[dict(r) for r in rows],
+        search=search,
+        status_filter=status,
+        page=page,
+        page_count=max(1, (total + page_size - 1) // page_size),
+        telegram_service_status=notification_service.get_telegram_service_status(),
+    )
+
+
+@app.route("/api/notifications/test-telegram", methods=["POST"])
+@login_required
+def api_notifications_test_telegram():
+    user = current_user()
+    message = "🤖 MEDBOT Test Notification\n\nTelegram notifications are working successfully."
+    status = notification_service.send_notification(
+        user["id"], user["phone"], message, "test", "telegram"
+    )
+    if config.NOTIFY_MODE == "simulate":
+        return jsonify({
+            "success": True,
+            "message": "Test Telegram notification simulated successfully.",
+            "status": status,
+        }), 200
+    if status in {"Sent", "Simulated"}:
+        return jsonify({
+            "success": True,
+            "message": "Test Telegram notification sent successfully.",
+            "status": status,
+        }), 200
+    return jsonify({
+        "success": False,
+        "message": "Telegram test notification failed.",
+        "status": status,
+    }), 500
+
+
+@app.route("/api/notifications")
+@login_required
+def api_notifications():
+    user = current_user()
+    limit = max(1, min(20, int(request.args.get("limit", 5, type=int))))
+    conn = get_connection()
+    notifications = [
+        dict(row) for row in conn.execute(
+            "SELECT * FROM notifications WHERE patient_id = ? ORDER BY created_at DESC LIMIT ?",
+            (user["id"], limit),
+        ).fetchall()
+    ]
+    unread_count = conn.execute(
+        "SELECT COUNT(*) AS c FROM notifications WHERE patient_id = ? AND (is_read IS NULL OR is_read = 0)",
+        (user["id"],),
+    ).fetchone()["c"]
+    conn.close()
+    return jsonify({"notifications": notifications, "unread_count": unread_count}), 200
+
+
+@app.route("/api/notifications/<int:notification_id>/read", methods=["POST"])
+@login_required
+def api_notification_read(notification_id):
+    user = current_user()
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT id FROM notifications WHERE id = ? AND patient_id = ?",
+        (notification_id, user["id"]),
+    ).fetchone()
+    if not row:
+        conn.close()
+        return jsonify({"error": "Notification not found."}), 404
+    conn.execute(
+        "UPDATE notifications SET is_read = 1, read_at = ? WHERE id = ?",
+        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), notification_id),
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"message": "Notification marked as read."}), 200
+
+
+@app.route("/api/notifications/<int:notification_id>/resend", methods=["POST"])
+@login_required
+def api_notification_resend(notification_id):
+    user = current_user()
+    status = notification_service.resend_notification(notification_id, user["id"])
+    if status is None:
+        return jsonify({"error": "Notification not found."}), 404
+    return jsonify({"message": "Notification resent.", "status": status}), 200
 
 
 @app.route("/api/notification/test", methods=["POST"])
@@ -470,14 +745,22 @@ def notifications_page():
 def api_notification_test():
     user = current_user()
     data = request.get_json(silent=True) or request.form
-    channel = data.get("channel", "sms")
+    channel = data.get("channel", "telegram" if config.NOTIFY_MODE == "telegram" else "sms")
     message = (data.get("message") or "").strip()
+    if channel not in {"sms", "email", "whatsapp", "telegram"}:
+        return jsonify({"error": "Choose SMS, email, WhatsApp, or Telegram."}), 400
     if not message:
         return jsonify({"error": "Message is required."}), 400
+    if len(message) > 2000:
+        return jsonify({"error": "Message must be 2,000 characters or fewer."}), 400
 
-    recipient = user["phone"] if channel != "email" else user["email"]
+    recipient = user["phone"] if channel not in {"email", "telegram"} else user["email"] if channel == "email" else user["phone"]
     status = notification_service.send_notification(user["id"], recipient, message, "test", channel)
-    return jsonify({"message": "Notification processed.", "status": status}), 200
+    return jsonify({
+        "message": "Notification processed.",
+        "status": status,
+        "telegram_service_status": notification_service.get_telegram_service_status(),
+    }), 200
 
 
 @app.route("/face-recognition")

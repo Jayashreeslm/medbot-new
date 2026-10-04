@@ -1,28 +1,83 @@
 {% extends "base.html" %}
 {% block title %}Notifications — MEDBOT{% endblock %}
+{% block page_breadcrumb %}Care communication{% endblock %}
+{% block page_title %}Notifications{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Notifications</h1>
-  <p class="page-subtitle">Notification history and test sending</p>
+  <div>
+    <p class="eyebrow">Care communication</p>
+    <h1>Notifications</h1>
+    <p class="page-subtitle">Telegram delivery status and notification history</p>
+  </div>
 </div>
 
-<div class="section-card">
-  <h2>Send Test Notification</h2>
+{% set counts = namespace(pending=0, failed=0) %}
+{% for n in notifications %}
+  {% if n.status | lower in ['pending', 'not configured'] %}{% set counts.pending = counts.pending + 1 %}{% endif %}
+  {% if n.status | lower in ['failed', 'undelivered'] %}{% set counts.failed = counts.failed + 1 %}{% endif %}
+{% endfor %}
+<div class="notification-overview">
+  <section class="section-card notification-overview-card">
+    <span class="widget-label">Telegram Status</span>
+    <strong class="status-{{ telegram_service_status.status | lower | replace(' ', '-') }}">{{ telegram_service_status.status }}</strong>
+    <span class="widget-footnote">{{ telegram_service_status.message }}</span>
+  </section>
+  <section class="section-card notification-overview-card">
+    <span class="widget-label">Notifications in this view</span>
+    <strong class="notification-overview-value">{{ notifications | length }}</strong>
+    <span class="widget-footnote">Current page results</span>
+  </section>
+  <section class="section-card notification-overview-card">
+    <span class="widget-label">Pending alerts</span>
+    <strong class="notification-overview-value">{{ counts.pending }}</strong>
+    <span class="widget-footnote">In the current view</span>
+  </section>
+  <section class="section-card notification-overview-card">
+    <span class="widget-label">Failed alerts</span>
+    <strong class="notification-overview-value">{{ counts.failed }}</strong>
+    <span class="widget-footnote">In the current view</span>
+  </section>
+</div>
+
+<div class="section-card notification-config-panel">
+  <div class="notification-config-copy">
+    <div>
+      <p class="eyebrow">Delivery channel</p>
+      <h2>Telegram Notification</h2>
+    </div>
+    <p class="page-subtitle">{{ telegram_service_status.message }}</p>
+  </div>
+  <div class="notification-test-action">
+    <button type="submit" form="testNotificationForm" class="btn btn-primary" id="sendTestButton">Send Test Telegram</button>
+  </div>
+  {% if telegram_service_status.status == 'Simulation Mode' %}
+  <p class="page-subtitle">Telegram notifications are simulated because NOTIFY_MODE=simulate.</p>
+  {% elif telegram_service_status.status == 'Not Configured' %}
+  <p class="page-subtitle">Add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to the .env file.</p>
+  {% endif %}
   <form id="testNotificationForm" class="test-notif-form">
-    <select id="test_channel">
-      <option value="sms">SMS</option>
-      <option value="whatsapp">WhatsApp</option>
-      <option value="email">Email</option>
-    </select>
-    <input type="text" id="test_message" placeholder="Message to send" value="This is a test notification from MEDBOT." required>
-    <button type="submit" class="btn btn-primary">Send</button>
   </form>
-  <div id="testResult" class="test-result hidden"></div>
+  <div id="testResult" class="test-result hidden" role="status" aria-live="polite"></div>
 </div>
 
 <div class="section-card">
   <h2>History</h2>
+  <form method="GET" action="{{ url_for('notifications_page') }}" class="filter-bar">
+    <input type="search" name="search" placeholder="Search recipient, type, or message" value="{{ search }}">
+    <select name="status">
+      <option value="all" {{ 'selected' if status_filter == 'all' }}>All statuses</option>
+      <option value="sent" {{ 'selected' if status_filter == 'sent' }}>Sent</option>
+      <option value="delivered" {{ 'selected' if status_filter == 'delivered' }}>Delivered</option>
+      <option value="undelivered" {{ 'selected' if status_filter == 'undelivered' }}>Undelivered</option>
+      <option value="pending" {{ 'selected' if status_filter == 'pending' }}>Pending</option>
+      <option value="failed" {{ 'selected' if status_filter == 'failed' }}>Failed</option>
+      <option value="not_configured" {{ 'selected' if status_filter == 'not_configured' }}>Not Configured</option>
+      <option value="simulated" {{ 'selected' if status_filter == 'simulated' }}>Simulated</option>
+    </select>
+    <button type="submit" class="btn btn-outline">Filter</button>
+  </form>
   {% if notifications %}
+  <div class="table-scroll">
   <table class="notif-table">
     <thead>
       <tr>
@@ -32,18 +87,32 @@
     <tbody>
       {% for n in notifications %}
       <tr>
-        <td class="stat-small">{{ n.created_at }}</td>
+        <td class="stat-small">{{ formatDateTime(n.created_at) }}</td>
         <td>{{ n.recipient_number }}</td>
         <td>{{ n.notification_type }}</td>
         <td class="notif-message">{{ n.message }}</td>
         <td>{{ n.channel | upper }}</td>
-        <td><span class="status-pill status-{{ n.status | lower }}">{{ n.status }}</span></td>
+        <td>
+          <span class="status-pill status-{{ n.status | lower }}" title="{{ n.error or '' }}{% if n.error_code %} (provider code {{ n.error_code }}){% endif %}">{{ n.status | title }}</span>
+          {% if n.error %}<span class="notif-error" title="{{ n.error }}{% if n.error_code %} (provider code {{ n.error_code }}){% endif %}">{{ n.error }}</span>{% endif %}
+          {% if n.status | lower in ['failed', 'undelivered', 'pending'] %}
+          <button type="button" class="btn btn-outline btn-sm resend-notification" data-id="{{ n.id }}">Resend</button>
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
   <p class="empty-state">No notifications yet.</p>
+  {% endif %}
+  {% if page_count > 1 %}
+  <nav class="pagination" aria-label="Notification pages">
+    {% if page > 1 %}<a class="btn btn-outline btn-sm" href="{{ url_for('notifications_page', search=search, status=status_filter, page=page - 1) }}">Previous</a>{% endif %}
+    <span>Page {{ page }} of {{ page_count }}</span>
+    {% if page < page_count %}<a class="btn btn-outline btn-sm" href="{{ url_for('notifications_page', search=search, status=status_filter, page=page + 1) }}">Next</a>{% endif %}
+  </nav>
   {% endif %}
 </div>
 

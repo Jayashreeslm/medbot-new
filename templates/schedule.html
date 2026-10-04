@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Schedules — MEDBOT{% endblock %}
+{% block page_breadcrumb %}Medication timing{% endblock %}
+{% block page_title %}Schedules{% endblock %}
 {% block content %}
 <div class="page-header">
   <div class="page-header-row">
@@ -26,7 +28,7 @@
   {% for s in schedules %}
   <div class="schedule-card {{ 'schedule-disabled' if not s.enabled }}">
     <div class="schedule-main">
-      <span class="schedule-time">{{ s.schedule_time }}</span>
+      <span class="schedule-time">{{ formatDateTime(s.schedule_time) }}</span>
       <div>
         <strong>{{ s.medicine_name }}</strong>
         <span class="schedule-meta">{{ s.dosage }} · Compartment {{ s.compartment_number }}</span>

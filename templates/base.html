@@ -1,70 +1,152 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{% block title %}MEDBOT{% endblock %}</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-<script>
-  // Apply saved theme before paint to avoid a flash of the wrong theme
-  (function() {
-    const saved = localStorage.getItem('medbot_theme') || 'light';
-    document.documentElement.setAttribute('data-theme', saved);
-  })();
-</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}MEDBOT{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script>
+    (function() {
+      const saved = localStorage.getItem('medbot_theme') || 'light';
+      document.documentElement.setAttribute('data-theme', saved);
+    })();
+  </script>
 </head>
 <body>
-<button class="theme-toggle theme-toggle-fixed" onclick="toggleTheme()" title="Toggle dark/light mode">🌓</button>
-{% if session.get('user_id') %}
-<div class="app-shell">
-  <aside class="sidebar">
-    <div class="sidebar-brand">
-      <span class="brand-icon">⚕</span>
-      <span class="brand-name">MEDBOT</span>
-    </div>
-    <nav class="sidebar-nav">
-      <a href="{{ url_for('dashboard') }}" class="{{ 'active' if request.endpoint == 'dashboard' }}">Dashboard</a>
-      <a href="{{ url_for('medicines_page') }}" class="{{ 'active' if request.endpoint == 'medicines_page' }}">Medicines</a>
-      <a href="{{ url_for('schedule_page') }}" class="{{ 'active' if request.endpoint == 'schedule_page' }}">Schedules</a>
-      <a href="{{ url_for('notifications_page') }}" class="{{ 'active' if request.endpoint == 'notifications_page' }}">Notifications</a>
-      <a href="{{ url_for('face_recognition_page') }}" class="{{ 'active' if request.endpoint == 'face_recognition_page' }}">Face Recognition</a>
-      <a href="{{ url_for('hardware_page') }}" class="{{ 'active' if request.endpoint == 'hardware_page' }}">Hardware</a>
-      <a href="{{ url_for('history_page') }}" class="{{ 'active' if request.endpoint == 'history_page' }}">History</a>
-      {% block nav_extra %}{% endblock %}
-      <a href="{{ url_for('profile') }}" class="{{ 'active' if request.endpoint == 'profile' }}">Profile</a>
-      <a href="{{ url_for('logout') }}" class="logout-link">Logout</a>
-    </nav>
-  </aside>
-  <main class="main-content">
-    {% include '_flash.html' %}
-    {% block content %}{% endblock %}
-  </main>
-</div>
+  <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
-<!-- Reminder Popup (polled globally on all protected pages) -->
-<div id="reminderPopup" class="modal-overlay hidden">
-  <div class="modal-box reminder-box">
-    <h2>MEDBOT MEDICINE REMINDER</h2>
-    <table class="detail-table">
-      <tr><th>Patient</th><td id="reminderPatient"></td></tr>
-      <tr><th>Medicine</th><td id="reminderMedicine"></td></tr>
-      <tr><th>Dosage</th><td id="reminderDosage"></td></tr>
-      <tr><th>Compartment</th><td id="reminderCompartment"></td></tr>
-      <tr><th>Scheduled Time</th><td id="reminderTime"></td></tr>
-    </table>
-    <div id="reminderErrors" class="form-errors hidden"></div>
-    <div class="modal-actions">
-      <button class="btn btn-outline" onclick="dispenseReminder()">DISPENSE NOW</button>
-      <button class="btn btn-primary" onclick="collectReminder()">MARK AS COLLECTED</button>
+  {% if session.get('user_id') %}
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark">M</div>
+        <div>
+          <div class="brand-name">MEDBOT</div>
+          <div class="brand-tagline">Your Smart Medicine Assistant</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Main navigation">
+        <a href="{{ url_for('dashboard') }}" class="sidebar-link {{ 'active' if request.endpoint == 'dashboard' }}">
+          <span class="nav-icon">◫</span>
+          <span>Dashboard</span>
+        </a>
+        <a href="{{ url_for('medicines_page') }}" class="sidebar-link {{ 'active' if request.endpoint == 'medicines_page' }}">
+          <span class="nav-icon">✚</span>
+          <span>Medicines</span>
+        </a>
+        <a href="{{ url_for('schedule_page') }}" class="sidebar-link {{ 'active' if request.endpoint == 'schedule_page' }}">
+          <span class="nav-icon">◔</span>
+          <span>Schedules</span>
+        </a>
+        <a href="{{ url_for('face_recognition_page') }}" class="sidebar-link {{ 'active' if request.endpoint == 'face_recognition_page' }}">
+          <span class="nav-icon">◎</span>
+          <span>Face Recognition</span>
+        </a>
+        <a href="{{ url_for('notifications_page') }}" class="sidebar-link {{ 'active' if request.endpoint == 'notifications_page' }}">
+          <span class="nav-icon">◌</span>
+          <span>Notifications</span>
+        </a>
+        <a href="{{ url_for('hardware_page') }}" class="sidebar-link {{ 'active' if request.endpoint == 'hardware_page' }}">
+          <span class="nav-icon">◍</span>
+          <span>Hardware</span>
+        </a>
+        <a href="{{ url_for('history_page') }}" class="sidebar-link {{ 'active' if request.endpoint == 'history_page' }}">
+          <span class="nav-icon">▣</span>
+          <span>Medicine History</span>
+        </a>
+        <a href="{{ url_for('profile') }}" class="sidebar-link {{ 'active' if request.endpoint == 'profile' }}">
+          <span class="nav-icon">◉</span>
+          <span>Profile</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="system-pill">
+          <span class="dot dot-online"></span>
+          <span>System Online</span>
+        </div>
+        <a href="{{ url_for('logout') }}" class="logout-link">Logout</a>
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="sidebar-toggle" id="sidebarToggle" type="button" aria-label="Toggle sidebar">☰</button>
+          <div>
+            <p class="topbar-breadcrumb">{% block page_breadcrumb %}Overview{% endblock %}</p>
+            <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <button class="icon-button theme-toggle" id="themeToggle" type="button" aria-label="Toggle light and dark theme" title="Toggle theme">◐</button>
+          <div class="notification-wrap">
+            <button class="icon-button" id="notificationBell" type="button" aria-label="Notifications" aria-controls="notificationPanel" aria-expanded="false">
+              🔔
+              <span class="notification-badge" id="notificationBadge">{{ unread_notification_count }}</span>
+            </button>
+            <div class="notification-panel hidden" id="notificationPanel" aria-label="Recent notifications">
+              <div class="notification-header">
+                <strong>Recent alerts</strong>
+              </div>
+              <div id="notificationList">
+                {% for item in recent_notifications %}
+                <button class="notification-item" type="button" data-notification-id="{{ item.id }}" aria-label="Open {{ item.title or item.notification_type }} notification">
+                  <div class="notification-item__icon">{{ item.icon or '•' }}</div>
+                  <div>
+                    <div class="notification-item__title">{{ item.title or item.notification_type }}</div>
+                    <div class="notification-item__message">{{ item.message[:80] }}</div>
+                  </div>
+                </button>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+
+          <div class="profile-chip">
+            <div class="profile-avatar">{{ current_user_name[:1].upper() if current_user_name else 'U' }}</div>
+            <div>
+              <div class="profile-name">{{ current_user_name or 'User' }}</div>
+              <div class="profile-status">Online</div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="page-shell">
+        {% include '_flash.html' %}
+        {% block content %}{% endblock %}
+      </main>
     </div>
   </div>
-</div>
-<script>const MEDBOT_PATIENT_NAME = {{ current_user_name | tojson }};</script>
-<script src="{{ url_for('static', filename='js/reminders.js') }}"></script>
-{% else %}
-  {% include '_flash.html' %}
-  {% block guest_content %}{% endblock %}
-{% endif %}
-<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+
+  <div id="reminderPopup" class="modal-overlay hidden">
+    <div class="modal-box reminder-box">
+      <h2>MEDBOT Medicine Reminder</h2>
+      <table class="detail-table">
+        <tr><th>Patient</th><td id="reminderPatient"></td></tr>
+        <tr><th>Medicine</th><td id="reminderMedicine"></td></tr>
+        <tr><th>Dosage</th><td id="reminderDosage"></td></tr>
+        <tr><th>Compartment</th><td id="reminderCompartment"></td></tr>
+        <tr><th>Scheduled Time</th><td id="reminderTime"></td></tr>
+      </table>
+      <div id="reminderErrors" class="form-errors hidden"></div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" onclick="dispenseReminder()">Dispense now</button>
+        <button class="btn btn-primary" onclick="collectReminder()">Mark as collected</button>
+      </div>
+    </div>
+  </div>
+
+  <script>const MEDBOT_PATIENT_NAME = {{ current_user_name | tojson }};</script>
+  <script src="{{ url_for('static', filename='js/reminders.js') }}"></script>
+  {% else %}
+    {% include '_flash.html' %}
+    {% block guest_content %}{% endblock %}
+  {% endif %}
+
+  <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html>

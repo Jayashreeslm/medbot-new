@@ -1,25 +1,51 @@
 {% extends "base.html" %}
 {% block title %}Profile — MEDBOT{% endblock %}
+{% block page_breadcrumb %}Patient details{% endblock %}
+{% block page_title %}Profile{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Profile</h1>
   <p class="page-subtitle">Patient and caretaker information</p>
 </div>
 
-<div class="section-card">
-  <h2>Patient Details</h2>
-  <table class="detail-table">
-    <tr><th>Name</th><td>{{ user['name'] }}</td></tr>
-    <tr><th>Email</th><td>{{ user['email'] }}</td></tr>
-    <tr><th>Mobile Number</th><td>{{ user['phone'] }}</td></tr>
-  </table>
-</div>
+<div class="profile-layout">
+  <section class="section-card profile-identity">
+    <div class="profile-avatar profile-avatar-large">{{ user['name'][:1].upper() }}</div>
+    <div>
+      <p class="eyebrow">Patient account</p>
+      <h2>{{ user['name'] }}</h2>
+      <span class="profile-type-label">MEDBOT patient profile</span>
+    </div>
+  </section>
 
-<div class="section-card">
-  <h2>Caretaker Details</h2>
-  <table class="detail-table">
-    <tr><th>Name</th><td>{{ user['caretaker_name'] }}</td></tr>
-    <tr><th>Mobile Number</th><td>{{ user['caretaker_phone'] }}</td></tr>
-  </table>
+  <section class="section-card profile-details">
+    <div class="section-heading"><div><p class="eyebrow">Personal details</p><h2>Patient information</h2></div></div>
+    <table class="detail-table">
+      <tr><th>Name</th><td>{{ user['name'] }}</td></tr>
+      <tr><th>Email</th><td>{{ user['email'] }}</td></tr>
+      <tr><th>Mobile Number</th><td>{{ user['phone'] }}</td></tr>
+    </table>
+  </section>
+
+  <section class="section-card profile-details">
+    <div class="section-heading"><div><p class="eyebrow">Support contact</p><h2>Caretaker information</h2></div></div>
+    <table class="detail-table">
+      <tr><th>Name</th><td>{{ user['caretaker_name'] }}</td></tr>
+      <tr><th>Mobile Number</th><td>{{ user['caretaker_phone'] }}</td></tr>
+    </table>
+  </section>
+
+  <section class="section-card profile-preferences">
+    <div class="section-heading"><div><p class="eyebrow">Communication</p><h2>Notification Preference</h2></div></div>
+    <form method="POST" class="notification-preference-form">
+      <label for="notification_preference">Send patient alerts by</label>
+      <select id="notification_preference" name="notification_preference">
+        <option value="sms" {{ 'selected' if user['notification_preference'] == 'sms' }}>SMS</option>
+        <option value="email" {{ 'selected' if user['notification_preference'] == 'email' }}>Email</option>
+        <option value="both" {{ 'selected' if user['notification_preference'] == 'both' }}>SMS and email</option>
+      </select>
+      <button type="submit" class="btn btn-primary">Save Preference</button>
+    </form>
+  </section>
 </div>
 {% endblock %}

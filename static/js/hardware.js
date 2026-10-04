@@ -4,7 +4,7 @@ function showResult(text, isError) {
   const el = document.getElementById("commandResult");
   el.textContent = text;
   el.classList.remove("hidden");
-  el.style.background = isError ? "#fee2e2" : "var(--primary-light)";
+  el.classList.toggle("is-error", Boolean(isError));
 }
 
 function updateConnectionUI(mode, lastSeen) {
@@ -20,7 +20,7 @@ async function testConnection() {
   try {
     const res = await fetch("/api/hardware/test", { method: "POST" });
     const data = await res.json();
-    updateConnectionUI(data.mode, new Date().toLocaleString());
+    updateConnectionUI(data.mode, formatDateTime(new Date().toISOString()));
     showResult(data.connected ? "ESP32 responded successfully." : `Simulation mode: ${data.note || "ESP32 not reachable."}`, !data.connected);
   } catch (err) {
     showResult("Network error while testing connection.", true);
@@ -129,7 +129,7 @@ async function switchMode(mode) {
     resultEl.style.background = "var(--primary-light)";
     setTimeout(() => window.location.reload(), 900);
   } catch (err) {
-    alert("Network error switching mode.");
+    showToast("Network error switching mode.", "error");
   }
 }
 
@@ -157,6 +157,13 @@ async function simulateBattery() {
     const badge = document.getElementById("batteryStatusBadge");
     badge.textContent = data.status;
     badge.className = "status-badge status-" + data.status.toLowerCase();
+    const percentage = Math.max(0, Math.min(100, Number(data.percentage) || 0));
+    const progress = document.getElementById("batteryProgress");
+    progress.setAttribute("aria-valuenow", String(percentage));
+    progress.classList.toggle("is-critical", percentage < 20);
+    progress.classList.toggle("is-low", percentage >= 20 && percentage < 30);
+    document.getElementById("batteryProgressFill").style.width = `${percentage}%`;
+    document.getElementById("batteryMeterValue").textContent = `${percentage}%`;
 
     let actionsText = `Status: ${data.status}`;
     if (data.safety && data.safety.actions && data.safety.actions.length > 0) {
@@ -169,6 +176,6 @@ async function simulateBattery() {
       setTimeout(() => window.location.reload(), 1200);
     }
   } catch (err) {
-    alert("Network error updating battery.");
+    showToast("Network error updating battery.", "error");
   }
 }

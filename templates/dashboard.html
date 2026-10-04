@@ -1,33 +1,162 @@
 {% extends "base.html" %}
 {% block title %}Dashboard — MEDBOT{% endblock %}
+{% block page_breadcrumb %}Overview{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Welcome, {{ user['name'] }}</h1>
-  <p class="page-subtitle">Here's what's happening with MEDBOT right now.</p>
+  <div>
+    <p class="eyebrow">Your medication assistant</p>
+    <h2 class="page-title">Welcome, {{ user['name'] }}</h2>
+    <p class="page-subtitle">Your care schedule and device overview.</p>
+  </div>
+  <div class="page-time">{{ current_time }}</div>
 </div>
 
-<div class="widget-grid">
-  <div class="widget-card">
-    <span class="widget-label">Operating Mode</span>
-    <span class="widget-value">{{ 'Fixed Position' if user['operating_mode'] == 'fixed' else 'Move Mode' }}</span>
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-card__top">
+      <span class="stat-icon stat-blue" aria-hidden="true">✚</span>
+      <span class="stat-trend positive">Inventory</span>
+    </div>
+    <div class="stat-card__value">{{ metrics.total_medicines }}</div>
+    <div class="stat-card__label">Total Medicines</div>
+    <div class="stat-card__meta">Across your compartments</div>
   </div>
-  <div class="widget-card">
-    <span class="widget-label">Active Medicines</span>
-    <span class="widget-value">{{ medicine_count }}</span>
+  <div class="stat-card">
+    <div class="stat-card__top">
+      <span class="stat-icon stat-teal" aria-hidden="true">⌁</span>
+      <span class="stat-trend {{ 'warning' if metrics.low_stock else 'positive' }}">{{ 'Review' if metrics.low_stock else 'Stable' }}</span>
+    </div>
+    <div class="stat-card__value">{{ metrics.low_stock }}</div>
+    <div class="stat-card__label">Low Stock</div>
+    <div class="stat-card__meta">At refill threshold</div>
   </div>
-  <div class="widget-card">
-    <span class="widget-label">Battery</span>
-    <span class="widget-value">{{ battery['percentage'] | round(0) if battery else '—' }}%</span>
-    <span class="status-badge status-{{ (battery['status'] | lower) if battery else 'unknown' }}">{{ battery['status'] if battery else 'UNKNOWN' }}</span>
+  <div class="stat-card">
+    <div class="stat-card__top">
+      <span class="stat-icon stat-blue" aria-hidden="true">◷</span>
+      <span class="stat-trend neutral">Today</span>
+    </div>
+    <div class="stat-card__value">{{ metrics.upcoming_dose }}</div>
+    <div class="stat-card__label">Enabled Schedules</div>
+    <div class="stat-card__meta">{{ metrics.today_doses }} dispensed today</div>
   </div>
-  <div class="widget-card">
-    <span class="widget-label">Hardware</span>
-    <span class="widget-value">{{ 'Connected' if hardware and hardware['connection_status'] == 'connected' else 'Simulation Mode' }}</span>
+  <div class="stat-card">
+    <div class="stat-card__top">
+      <span class="stat-icon stat-teal" aria-hidden="true">▰</span>
+      <span class="stat-trend {{ 'danger' if battery and battery.percentage < 20 else 'warning' if battery and battery.percentage < 30 else 'positive' }}">{{ battery.status if battery else 'Unknown' }}</span>
+    </div>
+    <div class="stat-card__value">{{ battery['percentage'] | round(0) if battery else '—' }}%</div>
+    <div class="stat-card__label">Battery Level</div>
+    <div class="stat-card__meta">{{ battery['voltage'] if battery else '—' }} V</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card__top">
+      <span class="stat-icon stat-blue" aria-hidden="true">⌂</span>
+      <span class="stat-trend {{ 'positive' if hardware and hardware['connection_status'] == 'connected' else 'neutral' }}">{{ 'Online' if hardware and hardware['connection_status'] == 'connected' else 'Simulation' }}</span>
+    </div>
+    <div class="stat-card__value">{{ 'Connected' if hardware and hardware['connection_status'] == 'connected' else 'Ready' }}</div>
+    <div class="stat-card__label">Device Status</div>
+    <div class="stat-card__meta">{{ 'ESP32 connection' if hardware and hardware['connection_status'] == 'connected' else 'Hardware simulation' }}</div>
   </div>
 </div>
 
-<div class="section-card">
-  <h2>Getting Started</h2>
-  <p>Your account is set up. Add medicines and schedules to start using MEDBOT's dispensing and reminder features.</p>
+<div class="dashboard-grid">
+  <section class="panel panel-large">
+    <div class="panel-header">
+      <div>
+        <p class="eyebrow">Next medication</p>
+        <h3>Next Medication</h3>
+      </div>
+      <span class="panel-badge">Upcoming</span>
+    </div>
+
+    {% if next_medication %}
+    <div class="next-medication">
+      <div class="next-medication__name">{{ next_medication.medicine_name }}</div>
+      <div class="next-medication__dosage">{{ next_medication.dosage }} · Compartment {{ next_medication.compartment_number }}</div>
+      <div class="next-medication__time">Scheduled for {{ formatDateTime(next_medication.schedule_time) }}</div>
+      <a class="btn btn-primary" href="{{ url_for('schedule_page') }}">View schedule</a>
+    </div>
+    {% else %}
+    <div class="empty-state-box">
+      <p>No medication schedules are configured yet.</p>
+      <a class="btn btn-primary" href="{{ url_for('schedule_page') }}">Create a schedule</a>
+    </div>
+    {% endif %}
+  </section>
+
+  <aside class="panel">
+    <div class="panel-header">
+      <div>
+        <p class="eyebrow">System</p>
+        <h3>System status</h3>
+      </div>
+    </div>
+    <div class="status-list">
+      <div class="status-row"><span>Device connection</span><strong>{{ 'Connected' if hardware and hardware['connection_status'] == 'connected' else 'Simulation Mode' }}</strong></div>
+      <div class="status-row"><span>Operating mode</span><strong>{{ 'Move Mode' if user['operating_mode'] == 'move' else 'Fixed Position Mode' }}</strong></div>
+      <div class="status-row"><span>Battery health</span><strong>{{ battery['status'] if battery else 'Unknown' }}</strong></div>
+    </div>
+    <div class="quick-actions">
+      <a class="btn btn-outline btn-sm" href="{{ url_for('medicines_page') }}">Medicines</a>
+      <a class="btn btn-outline btn-sm" href="{{ url_for('face_recognition_page') }}">Face check</a>
+      <a class="btn btn-outline btn-sm" href="{{ url_for('hardware_page') }}">Device controls</a>
+    </div>
+  </aside>
 </div>
+
+<section class="panel">
+  <div class="panel-header">
+    <div>
+      <p class="eyebrow">Dosing plan</p>
+      <h3>Scheduled Medication</h3>
+      <a href="{{ url_for('schedule_page') }}" class="panel-badge">Manage schedules</a>
+    </div>
+  </div>
+
+  {% if today_schedule %}
+  <div class="timeline">
+    {% for item in today_schedule %}
+    <div class="timeline-item {{ 'is-next' if item.is_next else '' }}">
+      <div class="timeline-time">{{ item.schedule_time }}</div>
+      <div class="timeline-content">
+        <div class="timeline-title">{{ item.medicine_name }}</div>
+          <div class="timeline-meta">{{ item.dosage }} · Compartment {{ item.compartment_number }}</div>
+      </div>
+      <div class="timeline-state {{ 'state-success' if item.status == 'Taken' else 'state-upcoming' }}">{{ item.status }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state-box">
+    <p>No medication schedules found for today.</p>
+  </div>
+  {% endif %}
+</section>
+
+<section class="panel dashboard-notifications">
+  <div class="panel-header">
+    <div>
+      <p class="eyebrow">Care updates</p>
+      <h3>Recent Notifications</h3>
+    </div>
+    <a class="panel-badge" href="{{ url_for('notifications_page') }}">View all</a>
+  </div>
+  {% if recent_notifications %}
+  <div class="recent-notification-list">
+    {% for item in recent_notifications[:4] %}
+    <div class="recent-notification-item">
+      <span class="recent-notification-icon" aria-hidden="true">{{ item.icon or '•' }}</span>
+      <div class="recent-notification-copy">
+        <strong>{{ item.title or item.notification_type | replace('_', ' ') | title }}</strong>
+        <span title="{{ item.message }}">{{ item.message }}</span>
+      </div>
+      <span class="status-pill status-{{ item.status | lower }}">{{ item.status | title }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state-box">No recent notifications.</div>
+  {% endif %}
+</section>
 {% endblock %}

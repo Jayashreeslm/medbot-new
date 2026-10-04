@@ -1,5 +1,5 @@
-from datetime import datetime
 from database.db import get_connection
+from services.time_service import database_timestamp
 
 
 def compute_stock_status(quantity, refill_threshold):
@@ -66,16 +66,18 @@ def compartment_taken(patient_id, compartment_number, exclude_id=None):
 
 
 def create_medicine(patient_id, medicine_name, dosage, quantity, compartment_number,
-                     description, refill_threshold):
+                     description, refill_threshold, batch_no=None, expiry_date=None,
+                     price=0, refill_due_date=None):
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
         """INSERT INTO medicines
-           (patient_id, medicine_name, dosage, quantity, initial_quantity, compartment_number,
-            description, refill_threshold, active)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)""",
-        (patient_id, medicine_name.strip(), dosage.strip(), quantity, quantity,
-         compartment_number, description.strip() if description else "", refill_threshold),
+              (patient_id, medicine_name, batch_no, expiry_date, price, refill_due_date, dosage,
+                quantity, initial_quantity, compartment_number, description, refill_threshold, active)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)""",
+          (patient_id, medicine_name.strip(), batch_no or None, expiry_date or None, price,
+            refill_due_date or None, dosage.strip(), quantity, quantity, compartment_number,
+            description.strip() if description else "", refill_threshold),
     )
     medicine_id = cur.lastrowid
     conn.commit()
@@ -84,16 +86,17 @@ def create_medicine(patient_id, medicine_name, dosage, quantity, compartment_num
 
 
 def update_medicine(medicine_id, patient_id, medicine_name, dosage, compartment_number,
-                     description, refill_threshold):
+                     description, refill_threshold, batch_no=None, expiry_date=None,
+                     price=0, refill_due_date=None):
     conn = get_connection()
     conn.execute(
         """UPDATE medicines
-           SET medicine_name = ?, dosage = ?, compartment_number = ?, description = ?,
-               refill_threshold = ?, updated_at = ?
+           SET medicine_name = ?, batch_no = ?, expiry_date = ?, price = ?, refill_due_date = ?,
+               dosage = ?, compartment_number = ?, description = ?, refill_threshold = ?, updated_at = ?
            WHERE id = ? AND patient_id = ?""",
-        (medicine_name.strip(), dosage.strip(), compartment_number,
-         description.strip() if description else "", refill_threshold,
-         datetime.now().isoformat(timespec="seconds"), medicine_id, patient_id),
+        (medicine_name.strip(), batch_no or None, expiry_date or None, price, refill_due_date or None,
+         dosage.strip(), compartment_number, description.strip() if description else "", refill_threshold,
+         database_timestamp(), medicine_id, patient_id),
     )
     conn.commit()
     conn.close()
@@ -110,7 +113,7 @@ def set_active(medicine_id, patient_id, active):
     conn = get_connection()
     conn.execute(
         "UPDATE medicines SET active = ?, updated_at = ? WHERE id = ? AND patient_id = ?",
-        (1 if active else 0, datetime.now().isoformat(timespec="seconds"), medicine_id, patient_id),
+        (1 if active else 0, database_timestamp(), medicine_id, patient_id),
     )
     conn.commit()
     conn.close()
@@ -129,11 +132,11 @@ def refill_medicine(medicine_id, patient_id, quantity_added, new_threshold=None)
     before = med["quantity"]
     after = before + quantity_added
     threshold = new_threshold if new_threshold is not None else med["refill_threshold"]
-    now = datetime.now().isoformat(timespec="seconds")
+    now = database_timestamp()
 
     conn.execute(
         """UPDATE medicines
-           SET quantity = ?, refill_threshold = ?, low_stock_notified = 0,
+           SET quantity = ?, refill_threshold = ?, refill_due_date = NULL, low_stock_notified = 0,
                last_refilled_at = ?, updated_at = ?
            WHERE id = ? AND patient_id = ?""",
         (after, threshold, now, now, medicine_id, patient_id),

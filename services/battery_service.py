@@ -1,6 +1,6 @@
-from datetime import datetime
 from database.db import get_connection
 from services import notification_service, hardware_service
+from services.time_service import database_timestamp
 
 
 def get_battery(patient_id):
@@ -57,7 +57,7 @@ def _apply_reading(patient_id, voltage, charging):
     battery = get_battery(patient_id)
     percentage = compute_percentage(voltage, battery["full_voltage"], battery["critical_voltage"])
     status = compute_status(percentage)
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = database_timestamp()
 
     conn = get_connection()
     conn.execute(
@@ -97,8 +97,7 @@ def _run_safety_checks(patient_id, percentage, voltage, status):
         if not battery["critical_battery_notified"]:
             notification_service.send_notification(
                 patient_id, patient["caretaker_phone"],
-                f"MEDBOT CRITICAL ALERT: Battery level: {percentage}%. Voltage: {voltage:.2f}V. "
-                f"MEDBOT requires charging immediately.",
+                f"🚨 MEDBOT Critical Battery\n\nBattery level: {percentage}%\n\nMove Mode/motors should remain disabled according to the existing MEDBOT safety logic.",
                 "critical_battery", "sms",
             )
             conn = get_connection()
@@ -116,8 +115,7 @@ def _run_safety_checks(patient_id, percentage, voltage, status):
         if not battery["low_battery_notified"]:
             notification_service.send_notification(
                 patient_id, patient["caretaker_phone"],
-                f"MEDBOT Alert: MEDBOT battery level is {percentage}%. Battery Voltage: {voltage:.2f}V. "
-                f"Please charge MEDBOT.",
+                f"🔋 MEDBOT Battery Warning\n\nBattery level: {percentage}%\n\nPlease charge the device soon.",
                 "low_battery", "sms",
             )
             conn = get_connection()

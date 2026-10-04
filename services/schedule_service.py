@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from database.db import get_connection
+from services.time_service import now_kolkata
 
 DAY_CODES = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"]
 
@@ -94,7 +95,7 @@ def compute_next_trigger(schedule_time, schedule_days, enabled, now=None):
     if not enabled:
         return None
 
-    now = now or datetime.now()
+    now = now or now_kolkata()
     hour, minute = map(int, schedule_time.split(":"))
 
     if schedule_days == "daily":
@@ -107,7 +108,8 @@ def compute_next_trigger(schedule_time, schedule_days, enabled, now=None):
 
     for days_ahead in range(0, 8):
         candidate_date = now.date() + timedelta(days=days_ahead)
-        candidate = datetime(candidate_date.year, candidate_date.month, candidate_date.day, hour, minute)
+        candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        candidate = candidate + timedelta(days=days_ahead)
         # Python weekday(): Monday=0 ... Sunday=6. Our DAY_CODES index: SU=0. Convert.
         python_weekday = candidate.weekday()  # Mon=0..Sun=6
         our_weekday = (python_weekday + 1) % 7  # SU=0..SA=6

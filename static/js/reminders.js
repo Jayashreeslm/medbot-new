@@ -23,7 +23,7 @@ function showReminderPopup(reminder) {
   document.getElementById("reminderMedicine").textContent = reminder.medicine_name;
   document.getElementById("reminderDosage").textContent = reminder.dosage;
   document.getElementById("reminderCompartment").textContent = reminder.compartment_number;
-  document.getElementById("reminderTime").textContent = reminder.scheduled_time;
+  document.getElementById("reminderTime").textContent = formatDateTime(reminder.scheduled_time);
   document.getElementById("reminderErrors").classList.add("hidden");
   document.getElementById("reminderPopup").classList.remove("hidden");
 }
@@ -48,6 +48,7 @@ async function dispenseReminder() {
       errEl.classList.remove("hidden");
       return;
     }
+    showToast("Medicine dispensed successfully.");
     pollReminders();
   } catch (err) {
     console.error(err);

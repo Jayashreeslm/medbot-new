@@ -1,11 +1,11 @@
 import base64
 import json
 import traceback
-from datetime import datetime
 
 import numpy as np
 
 from database.db import get_connection
+from services.time_service import database_timestamp
 
 try:
     import cv2
@@ -28,9 +28,8 @@ VALID_ANGLES = {"front", "left", "right", "up", "down"}
 
 def dependency_error():
     return {
-        "error": "Face recognition is unavailable on this machine because required packages "
-                 "(opencv-python, face_recognition, numpy) are not installed. "
-                 "Run: pip install opencv-python face_recognition numpy",
+        "error": "Face recognition is unavailable on this machine because the required packages "
+                 "are not installed. Run: python -m pip install -r requirements.txt",
         "code": "DEPENDENCIES_MISSING",
         "detail": FACE_DEPENDENCIES_ERROR,
     }
@@ -81,7 +80,7 @@ def register_face_sample(patient_id, image_b64, angle):
     conn.execute(
         """INSERT INTO face_encodings (patient_id, angle_label, encoding_json, created_at)
            VALUES (?, ?, ?, ?)""",
-        (patient_id, angle, json.dumps(encoding), datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+        (patient_id, angle, json.dumps(encoding), database_timestamp()),
     )
     conn.execute(
         "UPDATE users SET face_consent = 1 WHERE id = ?", (patient_id,)

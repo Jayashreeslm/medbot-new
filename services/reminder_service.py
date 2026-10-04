@@ -1,6 +1,8 @@
-from datetime import datetime
+import config
+
 from database.db import get_connection
 from services import notification_service, hardware_service
+from services.time_service import database_timestamp
 
 
 def get_pending_reminders(patient_id):
@@ -24,7 +26,7 @@ def create_reminder(patient_id, medicine_id, scheduled_time, operating_mode):
     conn = get_connection()
     patient = conn.execute("SELECT * FROM users WHERE id = ?", (patient_id,)).fetchone()
     medicine = conn.execute("SELECT * FROM medicines WHERE id = ?", (medicine_id,)).fetchone()
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = database_timestamp()
 
     cur = conn.cursor()
     cur.execute(
@@ -43,7 +45,7 @@ def create_reminder(patient_id, medicine_id, scheduled_time, operating_mode):
         patient["phone"],
         notification_service.msg_reminder(patient["name"], medicine["medicine_name"],
                                            medicine["dosage"], medicine["compartment_number"], scheduled_time),
-        "reminder", "sms", medicine_id=medicine_id,
+        "reminder", "telegram" if config.NOTIFY_MODE == "telegram" else "sms", medicine_id=medicine_id,
     )
 
     conn = get_connection()
@@ -72,7 +74,7 @@ def dispense_medicine(reminder_id, patient_id):
         return {"error": "Medicine not found."}, 404
 
     patient = conn.execute("SELECT * FROM users WHERE id = ?", (patient_id,)).fetchone()
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = database_timestamp()
 
     if not medicine["active"]:
         conn.close()
@@ -86,7 +88,9 @@ def dispense_medicine(reminder_id, patient_id):
         conn.close()
         notification_service.send_notification(
             patient_id, patient["caretaker_phone"],
-            notification_service.msg_empty(medicine["medicine_name"], medicine["compartment_number"]),
+            notification_service.msg_empty(
+                medicine["medicine_name"], medicine["compartment_number"], medicine["refill_threshold"]
+            ),
             "empty_compartment", "sms", medicine_id=medicine["id"],
         )
         return {"error": "COMPARTMENT EMPTY. Cannot dispense.", "stock_status": "EMPTY"}, 409
@@ -122,7 +126,8 @@ def dispense_medicine(reminder_id, patient_id):
     notification_service.send_notification(
         patient_id, patient["phone"],
         notification_service.msg_dispensed(medicine["medicine_name"], patient["name"],
-                                            medicine["dosage"], medicine["compartment_number"]),
+                                            medicine["dosage"], medicine["compartment_number"],
+                                            quantity=dose, dispensed_at=now),
         "dispensed", "sms", medicine_id=medicine["id"],
     )
 
@@ -137,6 +142,75 @@ def dispense_medicine(reminder_id, patient_id):
             "hardware": hw_result}, 200
 
 
+def dispense_inventory_medicine(medicine_id, patient_id, quantity):
+    """Dispense a requested quantity for the authenticated patient atomically."""
+    conn = get_connection()
+    medicine = conn.execute(
+        "SELECT * FROM medicines WHERE id = ? AND patient_id = ?", (medicine_id, patient_id)
+    ).fetchone()
+    patient = conn.execute("SELECT * FROM users WHERE id = ?", (patient_id,)).fetchone()
+    if not medicine:
+        conn.close()
+        return {"error": "Medicine not found."}, 404
+    if not medicine["active"]:
+        conn.close()
+        return {"error": "Medicine is inactive. Cannot dispense."}, 409
+    if medicine["quantity"] < quantity:
+        conn.close()
+        notification_service.send_notification(
+            patient_id, patient["caretaker_phone"],
+            notification_service.msg_insufficient_stock(
+                medicine["medicine_name"], medicine["compartment_number"], medicine["quantity"], quantity
+            ),
+            "insufficient_stock", "sms", medicine_id=medicine_id,
+        )
+        return {"error": "INSUFFICIENT MEDICINE STOCK.", "available": medicine["quantity"],
+                "required": quantity}, 409
+
+    now = database_timestamp()
+    cur = conn.execute(
+        """UPDATE medicines SET quantity = quantity - ?, last_dispensed_at = ?, updated_at = ?
+           WHERE id = ? AND patient_id = ? AND active = 1 AND quantity >= ?""",
+        (quantity, now, now, medicine_id, patient_id, quantity),
+    )
+    if cur.rowcount != 1:
+        conn.rollback()
+        conn.close()
+        return {"error": "Stock changed during dispensing. Refresh and try again."}, 409
+    new_quantity = medicine["quantity"] - quantity
+    history = conn.execute(
+        """INSERT INTO medicine_history
+           (patient_id, medicine_id, dispensed_time, notification_status, event_type, created_at)
+           VALUES (?, ?, ?, 'PENDING', 'DISPENSE', ?)""",
+        (patient_id, medicine_id, now, now),
+    )
+    history_id = history.lastrowid
+    conn.commit()
+    conn.close()
+
+    status = notification_service.send_notification(
+        patient_id, patient["phone"],
+        notification_service.msg_dispensed(
+            medicine["medicine_name"], patient["name"], medicine["dosage"],
+            medicine["compartment_number"], quantity=quantity, dispensed_at=now,
+        ),
+        "dispensed", "sms", medicine_id=medicine_id,
+    )
+    conn = get_connection()
+    conn.execute("UPDATE medicine_history SET notification_status = ? WHERE id = ?", (status, history_id))
+    conn.commit()
+    conn.close()
+
+    hardware_result, _ = hardware_service.send_command(
+        patient_id, "DISPENSE_MEDICINE",
+        {"compartment": medicine["compartment_number"], "medicine_id": medicine_id,
+         "quantity": quantity},
+    )
+    _check_stock_alerts(medicine_id, patient_id, new_quantity, medicine["refill_threshold"])
+    return {"message": "Medicine dispensed successfully.", "quantity": quantity,
+            "new_quantity": new_quantity, "hardware": hardware_result}, 200
+
+
 def _check_stock_alerts(medicine_id, patient_id, new_quantity, refill_threshold):
     conn = get_connection()
     medicine = conn.execute("SELECT * FROM medicines WHERE id = ?", (medicine_id,)).fetchone()
@@ -145,13 +219,20 @@ def _check_stock_alerts(medicine_id, patient_id, new_quantity, refill_threshold)
     if new_quantity == 0:
         notification_service.send_notification(
             patient_id, patient["caretaker_phone"],
-            notification_service.msg_empty(medicine["medicine_name"], medicine["compartment_number"]),
+            notification_service.msg_empty(
+                medicine["medicine_name"], medicine["compartment_number"], medicine["refill_threshold"]
+            ),
             "empty_compartment", "sms", medicine_id=medicine_id,
         )
     elif new_quantity <= refill_threshold and not medicine["low_stock_notified"]:
         notification_service.send_notification(
             patient_id, patient["caretaker_phone"],
-            notification_service.msg_low_stock(medicine["medicine_name"], medicine["compartment_number"], new_quantity),
+            notification_service.msg_low_stock(
+                medicine["medicine_name"],
+                medicine["compartment_number"],
+                new_quantity,
+                medicine["refill_threshold"],
+            ),
             "low_stock", "sms", medicine_id=medicine_id,
         )
         conn.execute("UPDATE medicines SET low_stock_notified = 1 WHERE id = ?", (medicine_id,))
@@ -169,7 +250,7 @@ def mark_collected(reminder_id, patient_id):
         conn.close()
         return {"error": "Reminder not found."}, 404
 
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = database_timestamp()
     conn.execute(
         """UPDATE medicine_history
            SET collection_time = ?, collected_status = 'COLLECTED', intake_status = 'COLLECTED'

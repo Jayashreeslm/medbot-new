@@ -1,5 +1,6 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from database.db import get_connection
+from services.time_service import now_kolkata
 
 
 def list_history(patient_id, range_filter="all", medicine_id=None, search=None):
@@ -12,7 +13,7 @@ def list_history(patient_id, range_filter="all", medicine_id=None, search=None):
     """
     params = [patient_id]
 
-    now = datetime.now()
+    now = now_kolkata()
     if range_filter == "today":
         start = now.strftime("%Y-%m-%d 00:00:00")
         query += " AND h.created_at >= ?"

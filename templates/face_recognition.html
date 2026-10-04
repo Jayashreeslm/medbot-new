@@ -1,71 +1,114 @@
 {% extends "base.html" %}
 {% block title %}Face Recognition — MEDBOT{% endblock %}
+{% block page_breadcrumb %}Patient identity{% endblock %}
+{% block page_title %}Face Recognition{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Face Recognition</h1>
-  <p class="page-subtitle">Multi-angle patient verification (front, slight left, right, up, down)</p>
+  <div>
+    <p class="eyebrow">Patient identity</p>
+    <h1>Face Recognition</h1>
+    <p class="page-subtitle">Secure verification for medicine collection</p>
+  </div>
+  <span class="status-badge {{ 'status-excellent' if status.consent_given else 'status-unknown' }}">
+    {{ 'Registration ready' if status.total_samples == 5 and status.consent_given else 'Setup in progress' }}
+  </span>
 </div>
 
 {% if not dependencies_available %}
-<div class="section-card dependency-warning">
+<div class="section-card dependency-warning" role="alert">
   <h2>Face Recognition Unavailable</h2>
   <p>The required packages are not installed on this machine. Run the following in your terminal, then restart MEDBOT:</p>
-  <code>pip install opencv-python face_recognition numpy</code>
+  <code>python -m pip install -r requirements.txt</code>
 </div>
 {% endif %}
 
-<div class="section-card">
-  <h2>Registration Status</h2>
-  <div class="widget-grid">
-    <div class="widget-card">
-      <span class="widget-label">Samples Registered</span>
-      <span class="widget-value">{{ status.total_samples }} / 5</span>
+<div class="face-workspace">
+  <section class="section-card face-camera-card" id="cameraCard" aria-labelledby="cameraHeading">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Live preview</p>
+        <h2 id="cameraHeading">Camera</h2>
+      </div>
+      <span class="camera-state" id="cameraState"><span class="status-dot"></span> Camera off</span>
     </div>
-    <div class="widget-card">
-      <span class="widget-label">Consent Given</span>
-      <span class="widget-value">{{ 'Yes' if status.consent_given else 'No' }}</span>
+    <div class="camera-area" id="cameraArea">
+      <div class="camera-empty-state" id="cameraEmptyState">
+        <span class="camera-empty-icon" aria-hidden="true">◎</span>
+        <strong>Camera Ready</strong>
+        <span>Start the camera to begin face verification.</span>
+      </div>
+      <video id="cameraFeed" autoplay playsinline class="camera-feed" aria-label="Live camera preview"></video>
+      <div class="camera-scan-frame" aria-hidden="true"><span></span></div>
+      <canvas id="captureCanvas" class="hidden"></canvas>
     </div>
-    <div class="widget-card">
-      <span class="widget-label">Angles Remaining</span>
-      <span class="widget-value stat-small">{{ status.angles_remaining | join(', ') if status.angles_remaining else 'None' }}</span>
+    <div class="camera-controls">
+      <button class="btn btn-primary" id="startCameraBtn" onclick="startCamera()"><span aria-hidden="true">▶</span> Start Camera</button>
+      <button class="btn btn-outline" id="stopCameraBtn" onclick="stopCamera()" disabled><span aria-hidden="true">■</span> Stop Camera</button>
     </div>
-  </div>
-</div>
+  </section>
 
-<div class="section-card">
-  <h2>Camera</h2>
-  <div class="camera-area">
-    <video id="cameraFeed" autoplay playsinline class="camera-feed"></video>
-    <canvas id="captureCanvas" class="hidden"></canvas>
-  </div>
-  <div class="camera-controls">
-    <button class="btn btn-outline" id="startCameraBtn" onclick="startCamera()">Start Camera</button>
-    <button class="btn btn-outline" id="stopCameraBtn" onclick="stopCamera()" disabled>Stop Camera</button>
-  </div>
-</div>
+  <aside class="face-side-column">
+    <section class="section-card recognition-status-card" aria-labelledby="recognitionStatusHeading">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Enrollment</p>
+          <h2 id="recognitionStatusHeading">Recognition status</h2>
+        </div>
+        <span class="recognition-indicator" id="recognitionIndicator" aria-hidden="true">?</span>
+      </div>
+      <div class="registration-progress">
+        <div class="registration-progress__label">
+          <span>Samples registered</span>
+          <strong>{{ status.total_samples }} / 5</strong>
+        </div>
+        <div class="progress-track" role="progressbar" aria-label="Face samples registered" aria-valuemin="0" aria-valuemax="5" aria-valuenow="{{ status.total_samples }}">
+          <span style="width: {{ (status.total_samples / 5 * 100) | int }}%"></span>
+        </div>
+      </div>
+      <div class="face-status-list">
+        <div class="face-status-row">
+          <span>Consent</span>
+          <strong class="status-label {{ 'is-complete' if status.consent_given else 'is-pending' }}">{{ 'Granted' if status.consent_given else 'Required' }}</strong>
+        </div>
+        <div class="face-status-row">
+          <span>Angles remaining</span>
+          <strong>{{ status.angles_remaining | join(', ') if status.angles_remaining else 'Complete' }}</strong>
+        </div>
+        <div class="face-status-row">
+          <span>Verification</span>
+          <strong id="recognitionStatusText">Not started</strong>
+        </div>
+      </div>
+      <p id="recognitionResult" class="recognition-result" role="status" aria-live="polite">Start the camera to run a verification check.</p>
+      <button class="btn btn-outline btn-block" id="recognizeBtn" onclick="runRecognition()" disabled>Start Recognition</button>
+    </section>
 
-<div class="section-card">
-  <h2>Register Face</h2>
-  <label class="consent-label">
-    <input type="checkbox" id="consentCheckbox">
-    I consent to MEDBOT storing and processing my facial data for this project.
-  </label>
-  <p id="captureInstruction" class="capture-instruction">Click "Capture Next Angle" and follow the prompt.</p>
-  <div id="registerErrors" class="form-errors hidden"></div>
-  <div class="camera-controls">
-    <button class="btn btn-primary" id="captureBtn" onclick="captureNextAngle()" disabled>Capture Next Angle</button>
+    <section class="section-card face-enrollment-card" aria-labelledby="enrollmentHeading">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Guided setup</p>
+          <h2 id="enrollmentHeading">Register face</h2>
+        </div>
+        <span class="step-count">{{ 5 - (status.angles_remaining | length) }} / 5</span>
+      </div>
+      <label class="consent-label" for="consentCheckbox">
+        <input type="checkbox" id="consentCheckbox" {{ 'checked' if status.consent_given }}>
+        <span>I consent to MEDBOT storing and processing my facial data for this project.</span>
+      </label>
+      <p id="captureInstruction" class="capture-instruction">Start the camera and follow the angle prompt.</p>
+      <div id="registerErrors" class="form-errors hidden" role="alert"></div>
+      <button class="btn btn-primary btn-block" id="captureBtn" onclick="captureNextAngle()" disabled>Capture Next Angle</button>
+    </section>
+
+    <section class="section-card face-data-card" aria-labelledby="faceDataHeading">
+      <div>
+        <p class="eyebrow">Privacy controls</p>
+        <h2 id="faceDataHeading">Face data</h2>
+        <p class="page-subtitle">Remove your registered samples from this device.</p>
+      </div>
+      <button class="btn btn-danger btn-sm" onclick="deleteFaceData()">Delete Face Data</button>
+    </section>
   </div>
-</div>
-
-<div class="section-card">
-  <h2>Recognition Test</h2>
-  <button class="btn btn-primary" id="recognizeBtn" onclick="runRecognition()" disabled>Start Recognition</button>
-  <div id="recognitionResult" class="recognition-result hidden"></div>
-</div>
-
-<div class="section-card">
-  <h2>Danger Zone</h2>
-  <button class="btn btn-danger" onclick="deleteFaceData()">Delete Face Data</button>
 </div>
 
 <script>
